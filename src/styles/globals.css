@@ -1,0 +1,21 @@
+/* Discord-style Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #2B2D31; 
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1A1B1E; 
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #111214; 
+}
+
+/* Make sure to delete scrollbarWidth: "none" from your inline styles! */
