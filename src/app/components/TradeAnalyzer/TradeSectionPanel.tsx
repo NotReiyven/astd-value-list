@@ -45,24 +45,15 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
 }) {
   const { units: ALL_UNITS } = useUnits();
   const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   
-  const inputWrapRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 150);
-    return () => clearTimeout(timer);
-  }, [query]);
 
   useEffect(() => {
     setSelectedIndex(-1);
-  }, [debouncedQuery, open]);
+  }, [query, open]);
 
   useEffect(() => {
     if (type !== "give") return;
@@ -75,19 +66,6 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [type]);
-
-  useEffect(() => {
-    return () => {
-      if (blurTimer.current) clearTimeout(blurTimer.current);
-    };
-  }, []);
-
-  const updateDropdownPos = () => {
-    if (inputWrapRef.current) {
-      const r = inputWrapRef.current.getBoundingClientRect();
-      setDropdownPos({ top: r.bottom + 4, left: r.left, width: r.width });
-    }
-  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -108,7 +86,6 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
     if (!raw) return;
     try {
       const u = JSON.parse(raw);
-      // TYPE CHECK FIX: Verify it's a valid object with required primitive fields before adding to state
       if (!u || typeof u !== "object" || typeof u.id !== "string" || typeof u.value !== "number") {
         return; 
       }
@@ -123,14 +100,14 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
   };
 
   const results = useMemo(() => {
-    const q = debouncedQuery.toLowerCase();
+    const q = query.toLowerCase().trim();
     return ALL_UNITS.filter(
-      (u) => debouncedQuery === "" ||
+      (u) => q === "" ||
         (u.name?.toLowerCase() || "").includes(q) ||
         (u.subtitle?.toLowerCase() || "").includes(q) ||
         (u.aliases?.some(a => a.toLowerCase().includes(q)))
-    ).slice(0, 5);
-  }, [debouncedQuery, ALL_UNITS]);
+    ).slice(0, 6);
+  }, [query, ALL_UNITS]);
 
   const handleAdd = (u: typeof ALL_UNITS[0]) => {
     const existing = items.find((i) => i.id === u.id);
@@ -197,7 +174,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
         </div>
       </div>
 
-      <div className="relative mb-3" ref={inputWrapRef}>
+      <div className="relative mb-3">
         <div
           className="flex items-center gap-2 px-3 py-2 rounded-[6px] focus-within:ring-2 focus-within:ring-[#5865F2]"
           style={{
@@ -214,9 +191,16 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
             placeholder="Search anime or in-game name..."
             className="flex-1 bg-transparent outline-none text-[13px] font-medium"
             style={{ color: "#DBDEE1", fontFamily: "'Inter', sans-serif", caretColor: "#5865F2" }}
-            onChange={(e) => { setQuery(e.target.value); updateDropdownPos(); setOpen(true); }}
-            onFocus={() => { if (blurTimer.current) clearTimeout(blurTimer.current); updateDropdownPos(); setOpen(true); }}
-            onBlur={() => { blurTimer.current = setTimeout(() => setOpen(false), 160); }}
+            onChange={(e) => { 
+              setQuery(e.target.value); 
+              setOpen(true); 
+            }}
+            onFocus={() => { 
+              setOpen(true); 
+            }}
+            onBlur={() => { 
+              setTimeout(() => setOpen(false), 200); 
+            }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -249,18 +233,14 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
           )}
         </div>
 
-        {open && results.length > 0 && dropdownPos && (
+        {open && results.length > 0 && (
           <div
-            className="rounded-[8px] overflow-hidden"
+            className="absolute left-0 right-0 mt-1 rounded-[8px] overflow-hidden"
             style={{
-              position: "fixed",
-              top: dropdownPos.top,
-              left: dropdownPos.left,
-              width: dropdownPos.width,
               background: "#2B2D31",
               border: "1px solid rgba(255,255,255,0.08)",
               boxShadow: "0 8px 16px rgba(0,0,0,0.24)",
-              zIndex: 200,
+              zIndex: 999999,
             }}
             onMouseDown={(e) => e.preventDefault()}
           >
@@ -280,7 +260,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                   key={u.id}
                   onClick={() => handleAdd(u)}
                   onMouseEnter={() => setSelectedIndex(i)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus-visible:outline-none focus-visible:bg-[rgba(255,255,255,0.06)] ${isSelected ? 'bg-[rgba(255,255,255,0.06)]' : 'bg-transparent'}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left focus-visible:outline-none ${isSelected ? 'bg-[rgba(255,255,255,0.06)]' : 'bg-transparent hover:bg-[rgba(255,255,255,0.04)]'}`}
                   style={{ borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.04)" }}
                 >
                   <div
@@ -303,7 +283,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <div className="flex items-center gap-1.5 mb-[1px]">
                       <p className="text-[13px] font-medium leading-tight truncate" style={{ color: "#DBDEE1", fontFamily: "'Inter', sans-serif" }}>
-                        <HighlightedText text={u.name} query={debouncedQuery} />
+                        <HighlightedText text={u.name} query={query} />
                       </p>
                       {dropCfg && (
                         <div
@@ -317,7 +297,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                       )}
                     </div>
                     <p className="text-[11px] font-medium leading-tight mt-[1px] truncate" style={{ color: "#949BA4", fontFamily: "'Inter', sans-serif" }}>
-                      <HighlightedText text={u.subtitle} query={debouncedQuery} />
+                      <HighlightedText text={u.subtitle} query={query} />
                     </p>
                   </div>
                   <span className="text-[12px] font-bold flex-shrink-0" style={{ color: "#B5BAC1", fontFamily: "'JetBrains Mono', monospace" }}>
