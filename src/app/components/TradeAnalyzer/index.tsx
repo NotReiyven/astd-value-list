@@ -30,7 +30,7 @@ export function TradeAnalyzerPanel({
   isOpen?: boolean;
   onClose?: () => void;
 }) {
-  const { units: ALL_UNITS } = useUnits(); // Hooked to live context data
+  const { units: ALL_UNITS } = useUnits();
   const [copied, setCopied] = useState(false);
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
 
@@ -40,7 +40,6 @@ export function TradeAnalyzerPanel({
   const [smartInputError, setSmartInputError] = useState("");
   const [ambiguousItems, setAmbiguousItems] = useState<AmbiguousToken[]>([]);
 
-  // Slang Dictionary State
   const [slangDict, setSlangDict] = useState<Record<string, string>>({});
   const [newSlangKey, setNewSlangKey] = useState("");
   const [newSlangTargetId, setNewSlangTargetId] = useState("");
@@ -51,30 +50,9 @@ export function TradeAnalyzerPanel({
   const [isMobile, setIsMobile] = useState(false);
 
   const panelRef = useRef<HTMLDivElement>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
 
   const [undoCache, setUndoCache] = useState<{give: TradeCard[], get: TradeCard[]} | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    try {
-      const savedGive = localStorage.getItem("astd_trade_give");
-      const savedGet = localStorage.getItem("astd_trade_get");
-      if (savedGive && savedGet) {
-        onOverwrite(JSON.parse(savedGive), JSON.parse(savedGet));
-      }
-    } catch (e) {
-      console.error("Failed to load saved trade", e);
-    }
-    setIsInitialized(true);
-  }, []);
-
-  useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem("astd_trade_give", JSON.stringify(giveItems));
-      localStorage.setItem("astd_trade_get", JSON.stringify(getItems));
-    }
-  }, [giveItems, getItems, isInitialized]);
 
   useEffect(() => {
     if (smartMenuOpen) {
@@ -224,7 +202,7 @@ export function TradeAnalyzerPanel({
   }, [undoCache, onOverwrite]);
 
   const handleSmartImport = useCallback(() => {
-    const result = parseSmartTrade(smartInput, ALL_UNITS); // Passes dynamic data
+    const result = parseSmartTrade(smartInput, ALL_UNITS); 
     if (result.error) {
       setSmartInputError(result.error);
       setTimeout(() => setSmartInputError(""), 3000);
@@ -256,7 +234,6 @@ export function TradeAnalyzerPanel({
           value: typeof resolvedUnit.value === "number" ? resolvedUnit.value : 0,
           demand: resolvedUnit.demand, qty
       });
-      // Automatically learn slang on resolution
       learnSlang(ambiguousItems[index].rawName, resolvedUnit.id);
     }
 
@@ -382,6 +359,7 @@ export function TradeAnalyzerPanel({
                       onChange={e => setSmartInput(e.target.value)} 
                       onKeyDown={e => e.key === "Enter" && handleSmartImport()} 
                       placeholder="Paste offer here..." 
+                      maxLength={500} 
                       className="flex-1 bg-[#1E1F22] border-none rounded-[4px] px-3 py-2.5 text-[14px] text-[#F2F3F5] outline-none placeholder-[#80848E] focus:ring-2 focus:ring-[#5865F2] transition-all" 
                       autoFocus 
                     />

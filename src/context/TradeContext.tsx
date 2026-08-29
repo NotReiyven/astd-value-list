@@ -17,14 +17,40 @@ type TradeContextType = {
 
 const TradeContext = createContext<TradeContextType | null>(null);
 
+// Same shape check used in App.tsx's useStickyState -- confirms the parsed
+// JSON is actually an array of objects with the fields the rest of this
+// file (and the UnitGrid/TradeAnalyzer components) assume exist before
+// handing it to useState. Prevents a corrupted/hand-edited localStorage
+// value from crashing the app the first time something calls .map()/.find()
+// on giveItems or getItems.
+const isTradeCardArray = (value: unknown): value is TradeCard[] =>
+  Array.isArray(value) &&
+  value.every(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      typeof (item as any).id === "string" &&
+      typeof (item as any).qty === "number"
+  );
+
+function loadStickyTradeCards(key: string): TradeCard[] {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) {
+      const parsed = JSON.parse(saved);
+      if (isTradeCardArray(parsed)) return parsed;
+      console.warn(`Ignoring malformed localStorage value for "${key}"`, parsed);
+    }
+  } catch (err) {
+    console.warn(`Error reading localStorage key "${key}":`, err);
+  }
+  return [];
+}
+
 export const TradeProvider = ({ children }: { children: React.ReactNode }) => {
-  const [giveItems, setGiveItems] = useState<TradeCard[]>(() => {
-    try { const saved = localStorage.getItem("astd_trade_give"); return saved ? JSON.parse(saved) : []; } catch { return []; }
-  });
-  
-  const [getItems, setGetItems] = useState<TradeCard[]>(() => {
-    try { const saved = localStorage.getItem("astd_trade_get"); return saved ? JSON.parse(saved) : []; } catch { return []; }
-  });
+  const [giveItems, setGiveItems] = useState<TradeCard[]>(() => loadStickyTradeCards("astd_trade_give"));
+
+  const [getItems, setGetItems] = useState<TradeCard[]>(() => loadStickyTradeCards("astd_trade_get"));
 
   useEffect(() => {
     localStorage.setItem("astd_trade_give", JSON.stringify(giveItems));

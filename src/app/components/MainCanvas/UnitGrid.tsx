@@ -1,15 +1,31 @@
-import { useState, useRef, memo } from "react";
+import { useState, useRef, memo, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X, Image as ImageIcon, ArrowLeft, ArrowRight } from "lucide-react";
 import { PopupUnit, GridUnit, MasterUnit, UnitStatus } from "../../../types";
 import { GRID_STATUS_CFG, getRarityLabel, SUPPLY_SCALE, DEMAND_SCALE, getTier, TIER_CONFIG, getProxyImage, getObtainability } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
+import { LazyRender } from "./LazyRender"; // IMPORT LAZYRENDER FOR CHUNKING
 
 export const UnitGrid = memo(function UnitGrid({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
+  // PERFORMANCE FIX: Chunk massive unit arrays into chunks of 24 to recycle DOM nodes as user scrolls
+  const chunks = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < units.length; i += 24) {
+      result.push(units.slice(i, i + 24));
+    }
+    return result;
+  }, [units]);
+
   return (
-    <div className="grid gap-3 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 155px), 1fr))" }}>
-      {units.map((unit) => (
-        <TierGridCard key={unit.id} unit={unit} onAddGive={onAddGive} onAddGet={onAddGet} />
+    <div className="flex flex-col gap-3 sm:gap-5 w-full">
+      {chunks.map((chunk, idx) => (
+        <LazyRender key={idx} placeholderHeight="540px">
+          <div className="grid gap-3 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 155px), 1fr))" }}>
+            {chunk.map((unit) => (
+              <TierGridCard key={unit.id} unit={unit} onAddGive={onAddGive} onAddGet={onAddGet} />
+            ))}
+          </div>
+        </LazyRender>
       ))}
     </div>
   );
@@ -20,7 +36,6 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const [isAdded, setIsAdded] = useState(false); 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // --- NEW: SWIPE GESTURE STATE ---
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -42,7 +57,6 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
     e.dataTransfer.effectAllowed = "copy";
   };
 
-  // --- NEW: NATIVE TOUCH EVENT HANDLERS ---
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
@@ -71,8 +85,8 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const proxyUrl = getProxyImage(unit.imageUrl);
 
   return (
-    <div className="relative w-full overflow-hidden rounded-[8px] group">
-      {/* --- NEW: SWIPE BACKGROUND INDICATORS --- */}
+    // PERFORMANCE FIX: content-visibility allows browser to natively skip calculating layout/paint for off-screen cards
+    <div className="relative w-full overflow-hidden rounded-[8px] group" style={{ contentVisibility: "auto", containIntrinsicSize: "260px" }}>
       <div className={`absolute inset-0 flex items-center px-5 font-bold transition-colors duration-200 z-0 ${swipeOffset > 0 ? 'bg-[#FAA61A] justify-start text-white' : swipeOffset < 0 ? 'bg-[#5865F2] justify-end text-white' : 'bg-transparent'}`}>
          {swipeOffset > 0 && <><ArrowRight className="w-4 h-4 mr-2" /> Add Give</>}
          {swipeOffset < 0 && <><ArrowLeft className="w-4 h-4 ml-2" /> Add Get</>}
@@ -95,7 +109,7 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
           triggerAddedGlow(); 
         }}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        className="flex flex-col h-full rounded-[8px] overflow-hidden cursor-pointer relative z-10"
+        className="flex flex-col h-full rounded-[8px] overflow-hidden cursor-pointer relative z-10 will-change-transform"
         style={{
           background: "#2B2D31",
           transition: swipeOffset === 0 ? "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)" : "none",

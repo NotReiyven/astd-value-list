@@ -7,14 +7,22 @@ const Sidebar = lazy(() => import("./components/Sidebar").then(module => ({ defa
 const MainCanvas = lazy(() => import("./components/MainCanvas").then(module => ({ default: module.MainCanvas })));
 const HomeChannel = lazy(() => import("./components/HomeChannel").then(module => ({ default: module.HomeChannel })));
 const TutorialChannel = lazy(() => import("./components/TutorialChannel").then(module => ({ default: module.TutorialChannel })));
-// NEW: Import ExtraNoticesChannel
 const ExtraNoticesChannel = lazy(() => import("./components/ExtraNoticesChannel").then(module => ({ default: module.ExtraNoticesChannel })));
+const WelcomeModal = lazy(() => import("./components/WelcomeModal").then(module => ({ default: module.WelcomeModal })));
 
-function useStickyState<T>(defaultValue: T, key: string): [T, React.Dispatch<React.SetStateAction<T>>] {
+function useStickyState<T>(
+  defaultValue: T,
+  key: string,
+  isValid: (value: unknown) => value is T = (_value): _value is T => true
+): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [value, setValue] = useState<T>(() => {
     try {
       const stickyValue = window.localStorage.getItem(key);
-      if (stickyValue !== null) return JSON.parse(stickyValue);
+      if (stickyValue !== null) {
+        const parsed = JSON.parse(stickyValue);
+        if (isValid(parsed)) return parsed;
+        console.warn(`Ignoring malformed localStorage value for "${key}"`, parsed);
+      }
     } catch (err) {
       console.warn(`Error reading localStorage key "${key}":`, err);
     }
@@ -28,6 +36,19 @@ function useStickyState<T>(defaultValue: T, key: string): [T, React.Dispatch<Rea
   return [value, setValue];
 }
 
+const isTradeCardArray = (value: unknown): value is TradeCard[] =>
+  Array.isArray(value) &&
+  value.every(
+    (item) =>
+      item &&
+      typeof item === "object" &&
+      typeof (item as any).id === "string" &&
+      typeof (item as any).qty === "number"
+  );
+
+const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
+const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+
 const CHANNEL_INFO: Record<string, { title: string; subtitle: string }> = {
   "home": { title: "home", subtitle: "Welcome to the ASTD Value List! Important information and update logs are posted here." },
   "value-list": { title: "value-list", subtitle: "Official ASTD unit values • Last updated August 27, 2026" },
@@ -38,13 +59,13 @@ const CHANNEL_INFO: Record<string, { title: string; subtitle: string }> = {
 export default function App() {
   const [isBooting, setIsBooting] = useState(true);
 
-  const [globalYouGive, setGlobalYouGive] = useStickyState<TradeCard[]>([], "astd_give");
-  const [globalYouGet,  setGlobalYouGet]  = useStickyState<TradeCard[]>([], "astd_get");
-  const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel");
+  const [globalYouGive, setGlobalYouGive] = useStickyState<TradeCard[]>([], "astd_give", isTradeCardArray);
+  const [globalYouGet,  setGlobalYouGet]  = useStickyState<TradeCard[]>([], "astd_get", isTradeCardArray);
+  const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel", isNonEmptyString);
   const [activeTierFilter, setActiveTierFilter] = useStickyState<FilterKey>("S", "astd_tier");
 
-  const [isRosterOpen, setIsRosterOpen] = useStickyState(window.innerWidth >= 768, "astd_roster");
-  const [isAnalyzerOpen, setIsAnalyzerOpen] = useStickyState(false, "astd_analyzer");
+  const [isRosterOpen, setIsRosterOpen] = useStickyState(window.innerWidth >= 768, "astd_roster", isBoolean);
+  const [isAnalyzerOpen, setIsAnalyzerOpen] = useStickyState(false, "astd_analyzer", isBoolean);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const touchStartPos = useRef<{x: number, y: number} | null>(null);
@@ -71,7 +92,8 @@ export default function App() {
       import("./components/MainCanvas"),
       import("./components/HomeChannel"),
       import("./components/TutorialChannel"),
-      import("./components/ExtraNoticesChannel") // NEW
+      import("./components/ExtraNoticesChannel"),
+      import("./components/WelcomeModal")
     ]).then(() => {
       setTimeout(() => setIsBooting(false), 1500);
     }).catch(() => setIsBooting(false));
@@ -215,6 +237,8 @@ export default function App() {
       onTouchEnd={handleTouchEnd}
     >
       <Suspense fallback={null}>
+        
+        <WelcomeModal />
 
         {isRosterOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setIsRosterOpen(false)} />}
         {isAnalyzerOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setIsAnalyzerOpen(false)} />}
@@ -237,7 +261,7 @@ export default function App() {
         </div>
 
         <div 
-          className={`fixed md:relative z-50 top-0 bottom-0 left-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none ${isRosterOpen ? 'w-[85vw] max-w-[320px] md:w-[240px]' : 'w-0'}`}
+          className={`fixed md:relative z-50 top-0 bottom-0 left-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isRosterOpen ? 'w-[85vw] max-w-[320px] md:w-[240px] translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'}`}
           style={{ opacity: isRosterOpen ? 1 : 0 }}
         >
           <div className="w-[85vw] max-w-[320px] md:w-[240px] h-full">
@@ -279,8 +303,16 @@ export default function App() {
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {activeChannel === "home" ? ( <HomeChannel />
             ) : activeChannel === "tutorial" ? ( <TutorialChannel onToggleAnalyzer={() => setIsAnalyzerOpen(!isAnalyzerOpen)} onAddGive={handleAddGive} onAddGet={handleAddGet} /> 
-            ) : activeChannel === "value-list" ? ( <MainCanvas activeTierFilter={activeTierFilter} setActiveTierFilter={setActiveTierFilter} searchQuery={globalSearchQuery} setSearchQuery={setGlobalSearchQuery} onAddGive={handleAddGive} onAddGet={handleAddGet} />
-            ) : activeChannel === "extra-notices" ? ( <ExtraNoticesChannel /> // NEW
+            ) : activeChannel === "value-list" ? ( 
+              <MainCanvas 
+                activeTierFilter={activeTierFilter} 
+                setActiveTierFilter={setActiveTierFilter} 
+                searchQuery={globalSearchQuery} 
+                setSearchQuery={setGlobalSearchQuery} 
+                onAddGive={handleAddGive} 
+                onAddGet={handleAddGet} 
+              />
+            ) : activeChannel === "extra-notices" ? ( <ExtraNoticesChannel />
             ) : (
               <div className="flex-1 flex items-center justify-center bg-[#313338] transition-all duration-300 animate-fade-in px-4">
                  <div className="text-center animate-slide-up"><h2 className="text-2xl font-bold text-[#F2F3F5] mb-2 capitalize">Welcome to {activeChannel}</h2><p className="text-[#949BA4]">This channel is currently under construction.</p></div>
@@ -290,7 +322,7 @@ export default function App() {
         </div>
 
         <div 
-          className={`fixed md:relative z-50 top-0 bottom-0 right-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none ${isAnalyzerOpen ? 'w-[90vw] max-w-[400px] md:w-[400px] pointer-events-auto' : 'w-0 pointer-events-none'}`}
+          className={`fixed md:relative z-50 top-0 bottom-0 right-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isAnalyzerOpen ? 'w-[90vw] max-w-[400px] md:w-[400px] translate-x-0 pointer-events-auto' : 'w-0 translate-x-full md:translate-x-0 pointer-events-none'}`}
           style={{ opacity: isAnalyzerOpen ? 1 : 0 }}
         >
           <div className="w-[90vw] max-w-[400px] md:w-[400px] h-full bg-[#2B2D31]">

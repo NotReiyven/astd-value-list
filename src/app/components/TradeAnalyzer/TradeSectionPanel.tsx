@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect, memo, useMemo } from "react";
 import { Search, X, Plus } from "lucide-react";
-import { TradeCard, PopupUnit } from "../../../types";
+import { TradeCard } from "../../../types";
 import { GRID_STATUS_CFG, getProxyImage } from "../../../data";
 import { useUnits } from "../../../context/UnitContext";
 import { ActiveCardRow } from "./ActiveCardRow";
 import { getAvatarStyle, getInitials } from "./summaryUtils";
 
-// --- NEW: Search Highlighting Component ---
 const HighlightedText = ({ text, query }: { text: string; query: string }) => {
   if (!query || !text) return <>{text}</>;
   const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
@@ -108,7 +107,12 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
     const raw = e.dataTransfer.getData("unit");
     if (!raw) return;
     try {
-      const u: PopupUnit = JSON.parse(raw);
+      const u = JSON.parse(raw);
+      // TYPE CHECK FIX: Verify it's a valid object with required primitive fields before adding to state
+      if (!u || typeof u !== "object" || typeof u.id !== "string" || typeof u.value !== "number") {
+        return; 
+      }
+
       const existing = items.find((c) => c.id === u.id);
       if (existing) {
         onQtyChange(existing.id, existing.qty + 1);
@@ -299,7 +303,6 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                   <div className="flex-1 min-w-0 flex flex-col justify-center">
                     <div className="flex items-center gap-1.5 mb-[1px]">
                       <p className="text-[13px] font-medium leading-tight truncate" style={{ color: "#DBDEE1", fontFamily: "'Inter', sans-serif" }}>
-                        {/* --- NEW: Highlighting applied here --- */}
                         <HighlightedText text={u.name} query={debouncedQuery} />
                       </p>
                       {dropCfg && (
@@ -314,7 +317,6 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                       )}
                     </div>
                     <p className="text-[11px] font-medium leading-tight mt-[1px] truncate" style={{ color: "#949BA4", fontFamily: "'Inter', sans-serif" }}>
-                      {/* --- NEW: Highlighting applied here --- */}
                       <HighlightedText text={u.subtitle} query={debouncedQuery} />
                     </p>
                   </div>

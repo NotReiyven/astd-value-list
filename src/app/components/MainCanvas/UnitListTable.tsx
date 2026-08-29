@@ -1,8 +1,9 @@
-import { memo, useState, useRef } from "react";
+import { memo, useState, useRef, useMemo } from "react";
 import { Plus, X, Image as ImageIcon, ArrowRight, ArrowLeft } from "lucide-react";
 import { PopupUnit, MasterUnit } from "../../../types";
 import { GRID_STATUS_CFG, getTier, TIER_CONFIG, getProxyImage, getObtainability } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
+import { LazyRender } from "./LazyRender"; // IMPORT LAZYRENDER FOR CHUNKING
 
 export const getStatColor = (label: string, value: number) => {
   if (label === "R") {
@@ -31,7 +32,6 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
   const [isAdded, setIsAdded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // --- NEW: SWIPE GESTURE STATE ---
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -62,7 +62,6 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
     }
   };
 
-  // --- NEW: NATIVE TOUCH EVENT HANDLERS ---
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
@@ -93,8 +92,8 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
       : <span className="text-[14px] md:text-[15px] font-bold tracking-tight text-[#F2F3F5] font-mono">{(unit.value as number).toLocaleString()}</span>;
 
   return (
-    <div className="relative group w-full overflow-hidden" style={{ borderBottom: !isLast ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-      {/* --- NEW: SWIPE BACKGROUND INDICATORS --- */}
+    // PERFORMANCE FIX: content-visibility completely isolates the row until user scrolls to it
+    <div className="relative group w-full overflow-hidden" style={{ borderBottom: !isLast ? "1px solid rgba(255,255,255,0.04)" : "none", contentVisibility: "auto", containIntrinsicSize: "56px" }}>
       <div className={`absolute inset-0 flex items-center px-5 font-bold transition-colors duration-200 z-0 ${swipeOffset > 0 ? 'bg-[#FAA61A] justify-start text-white' : swipeOffset < 0 ? 'bg-[#5865F2] justify-end text-white' : 'bg-transparent'}`}>
          {swipeOffset > 0 && <><ArrowRight className="w-4 h-4 mr-2" /> Add Give</>}
          {swipeOffset < 0 && <><ArrowLeft className="w-4 h-4 ml-2" /> Add Get</>}
@@ -108,7 +107,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        className="relative flex flex-col md:grid md:grid-cols-[56px_280px_minmax(200px,1fr)_160px_120px] items-stretch cursor-pointer select-none even:bg-[rgba(255,255,255,0.015)] bg-[#2B2D31] hover:bg-[rgba(255,255,255,0.04)] z-10"
+        className="relative flex flex-col md:grid md:grid-cols-[56px_280px_minmax(200px,1fr)_160px_120px] items-stretch cursor-pointer select-none even:bg-[rgba(255,255,255,0.015)] bg-[#2B2D31] hover:bg-[rgba(255,255,255,0.04)] z-10 will-change-transform"
         style={{ 
           background: isAdded ? `${tierColor}40` : "",
           transform: `translateX(${swipeOffset}px) ${isAdded ? "scale(0.98)" : "scale(1)"}`,
@@ -197,6 +196,15 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
 });
 
 export const UnitListTable = memo(function UnitListTable({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
+  // PERFORMANCE FIX: Chunk massive unit arrays into chunks of 30 to recycle DOM nodes as user scrolls
+  const chunks = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < units.length; i += 30) {
+      result.push(units.slice(i, i + 30));
+    }
+    return result;
+  }, [units]);
+
   return (
     <div className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#2B2D31] shadow-sm pb-2 md:pb-0 overflow-hidden">
       <div className="flex flex-col w-full">
@@ -209,8 +217,14 @@ export const UnitListTable = memo(function UnitListTable({ units, onAddGive, onA
         </div>
         
         <div className="flex flex-col bg-[#2B2D31]">
-          {units.map((unit, i) => (
-            <UnitListRow key={unit.id} unit={unit} isLast={i === units.length - 1} onAddGive={onAddGive} onAddGet={onAddGet} />
+          {chunks.map((chunk, idx) => (
+            <LazyRender key={idx} placeholderHeight="1680px">
+              <div className="flex flex-col w-full">
+                {chunk.map((unit, i) => (
+                  <UnitListRow key={unit.id} unit={unit} isLast={idx === chunks.length - 1 && i === chunk.length - 1} onAddGive={onAddGive} onAddGet={onAddGet} />
+                ))}
+              </div>
+            </LazyRender>
           ))}
         </div>
       </div>

@@ -60,7 +60,11 @@ export const ActiveCardRow = memo(function ActiveCardRow({
   const handlePin = useCallback(() => onTogglePin(card.id), [card.id, onTogglePin]);
 
   return (
-    <div className={`flex items-center gap-2 bg-[#2B2D31] hover:bg-[rgba(255,255,255,0.02)] p-2 rounded-[8px] border transition-colors group ${isPinned ? "border-[#5865F2] shadow-[0_0_8px_rgba(88,101,242,0.15)]" : "border-[rgba(255,255,255,0.04)]"}`}>
+    // PERFORMANCE FIX: contentVisibility isolates this row from layout thrashing
+    <div 
+      className={`flex items-center gap-2 bg-[#2B2D31] hover:bg-[rgba(255,255,255,0.02)] p-2 rounded-[8px] border transition-colors group ${isPinned ? "border-[#5865F2] shadow-[0_0_8px_rgba(88,101,242,0.15)]" : "border-[rgba(255,255,255,0.04)]"}`}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '58px' }}
+    >
       <div className={`w-10 h-10 flex-shrink-0 rounded-[6px] bg-[#111214] overflow-hidden flex items-center justify-center border ${isPinned ? "border-[rgba(88,101,242,0.5)]" : "border-[rgba(255,255,255,0.04)]"}`}>
          {proxyUrl ? (
            <img 

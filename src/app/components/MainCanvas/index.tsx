@@ -1,5 +1,5 @@
 import { LazyRender } from "./LazyRender";
-import { useState, useRef, useDeferredValue, useMemo } from "react";
+import { useState, useRef, useDeferredValue, useMemo, memo } from "react";
 import { Search, X, LayoutGrid, List, ArrowUpDown, Filter, ArrowUp } from "lucide-react";
 import { PopupUnit, FilterKey, MasterUnit } from "../../../types";
 import { TIER_CONFIG, FILTERS, getTier } from "../../../data"; 
@@ -25,7 +25,6 @@ const FILTER_OPTIONS = {
 
 const STICKY_HEADER_CLASS = "relative md:sticky md:top-[-1px] z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
 
-// Discord-style Skeleton Loader Component
 const SkeletonLoader = ({ viewMode }: { viewMode: "grid" | "list" }) => {
   if (viewMode === "list") {
     return (
@@ -60,14 +59,15 @@ const SkeletonLoader = ({ viewMode }: { viewMode: "grid" | "list" }) => {
   );
 };
 
-export function MainCanvas({
+// PERFORMANCE FIX: Wrapped MainCanvas in React.memo so the trade panel doesn't trigger 500+ component re-renders
+export const MainCanvas = memo(function MainCanvas({
   activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet,
 }: {
   activeTierFilter: FilterKey; setActiveTierFilter: (f: FilterKey) => void;
   searchQuery: string; setSearchQuery: (s: string) => void;
   onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void;
 }) {
-  const { units: ALL_UNITS, isLoading } = useUnits(); // LIVE DATA HOOK
+  const { units: ALL_UNITS, isLoading } = useUnits(); 
   const tier = TIER_CONFIG[activeTierFilter] ?? TIER_CONFIG["S"];
   
   const [showWelcome, setShowWelcome] = useState(() => {
@@ -117,7 +117,7 @@ export function MainCanvas({
       if (map[t]) map[t].push(u);
     });
     return map;
-  }, [ALL_UNITS]); // Bound to live data
+  }, [ALL_UNITS]); 
 
   const filteredAllUnits = useMemo(() => {
     const rawFiltered = ALL_UNITS.filter(u => {
@@ -127,7 +127,7 @@ export function MainCanvas({
       return matchesSearch && matchesTier;
     });
     return processUnits(rawFiltered, sortMode, statusFilter);
-  }, [ALL_UNITS, deferredSearchQuery, activeTierFilter, sortMode, statusFilter]); // Bound to live data
+  }, [ALL_UNITS, deferredSearchQuery, activeTierFilter, sortMode, statusFilter]); 
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#313338] relative">
@@ -222,7 +222,6 @@ export function MainCanvas({
             </div>
           )}
 
-          {/* LOADING STATE INTERCEPTOR */}
           {isLoading ? (
             <div className="mx-2 md:mx-0">
                <div className={STICKY_HEADER_CLASS}>
@@ -330,4 +329,4 @@ export function MainCanvas({
 
     </div>
   );
-}
+});

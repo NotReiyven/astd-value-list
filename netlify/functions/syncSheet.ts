@@ -1,4 +1,36 @@
-import { Handler } from "@netlify/functions";
+import { Handler, HandlerResponse } from "@netlify/functions";
+
+// Strict Interfaces for Google Sheets API
+interface ColorObj {
+  red?: number;
+  green?: number;
+  blue?: number;
+}
+
+interface CellData {
+  formattedValue?: string;
+  effectiveFormat?: {
+    backgroundColor?: ColorObj;
+  };
+}
+
+interface RowData {
+  values?: CellData[];
+}
+
+interface SheetProperties {
+  title?: string;
+}
+
+interface Sheet {
+  properties?: SheetProperties;
+  data?: { rowData?: RowData[] }[];
+}
+
+interface SpreadsheetData {
+  properties?: SheetProperties;
+  sheets?: Sheet[];
+}
 
 const COLOR_TARGETS = [
   { tag: "dropping", r: 255, g: 0, b: 0 },
@@ -20,7 +52,7 @@ const COLOR_TARGETS = [
   { tag: "stable", r: 255, g: 255, b: 255 }
 ];
 
-function getTagFromColor(colorObj: any) {
+function getTagFromColor(colorObj?: ColorObj) {
   if (!colorObj) return "stable";
   const r = Math.round((colorObj.red || 0) * 255);
   const g = Math.round((colorObj.green || 0) * 255);
@@ -34,30 +66,68 @@ function getTagFromColor(colorObj: any) {
   return minDistance < 100 ? bestTag : "stable";
 }
 
+// Added CORS and strict headers
+function jsonResponse(
+  statusCode: number,
+  body: unknown,
+  extraHeaders: Record<string, string> = {}
+): HandlerResponse {
+  // Use explicit domain in production, fallback if unset.
+  const allowedOrigin = process.env.URL || "https://astd-value-list.netlify.app";
+  
+  return {
+    statusCode,
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": allowedOrigin,
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      ...extraHeaders
+    },
+    body: JSON.stringify(body)
+  };
+}
+
 export const handler: Handler = async (event, context) => {
+  // Handle Preflight OPTIONS request for CORS
+  if (event.httpMethod === "OPTIONS") {
+    return jsonResponse(204, "");
+  }
+
+  // Block non-GET requests
+  if (event.httpMethod !== "GET") {
+    return jsonResponse(405, { error: "Method Not Allowed" });
+  }
+
+  // CRITICAL FIX: Block all query parameters to prevent Cache-Busting/Quota DoS
+  if (event.queryStringParameters && Object.keys(event.queryStringParameters).length > 0) {
+    return jsonResponse(400, { error: "Query parameters are not allowed." });
+  }
+
   const API_KEY = process.env.GOOGLE_SHEETS_API_KEY;
   const SHEET_ID = process.env.SPREADSHEET_ID;
-  
+
   // Scrape all core sheets to build the live payload
   const ranges = [
-    "S Tier!A:H", "A Tier!A:H", "B Tier!A:H", "C Tier!A:H", 
-    "Pure Tier!A:H", "Oddities!A:H", "Untiered!A:H", 
+    "S Tier!A:H", "A Tier!A:H", "B Tier!A:H", "C Tier!A:H",
+    "Pure Tier!A:H", "Oddities!A:H", "Untiered!A:H",
     "Home!A:K", "Extra Notices!A:B"
   ];
   const batchRanges = ranges.map(r => `ranges=${encodeURIComponent(r)}`).join("&");
 
-  if (!API_KEY || !SHEET_ID) return { statusCode: 500, body: JSON.stringify({ error: "Missing Environment Variables" }) };
+  if (!API_KEY || !SHEET_ID) {
+    return jsonResponse(500, { error: "Missing Environment Variables" });
+  }
 
   try {
     const response = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}?${batchRanges}&includeGridData=true&key=${API_KEY}`);
-    const data = await response.json();
+    const data = (await response.json()) as SpreadsheetData;
 
     if (!data.sheets) throw new Error("No grid data found in spreadsheet");
 
     const parsedUnits: any[] = [];
     const changelog: string[] = [];
     const notices: any[] = [];
-    
+
     const sheetTitle = data.properties?.title || "ASTD Official Value List";
     const lastUpdated = new Date().toISOString();
 
@@ -71,17 +141,17 @@ export const handler: Handler = async (event, context) => {
       // ========================================================
       if (tabName === "Home") {
         let changelogColIdx = -1;
-        rowData.forEach((row: any) => {
+        rowData.forEach((row: RowData) => {
           if (!row.values) return;
-          
+
           if (changelogColIdx === -1) {
             for (let j = 0; j < row.values.length; j++) {
               if ((row.values[j]?.formattedValue || "").includes("Latest Update Log")) {
                 changelogColIdx = j; break;
               }
             }
-          } 
-          
+          }
+
           if (changelogColIdx !== -1) {
             const text = row.values[changelogColIdx]?.formattedValue?.trim();
             if (text && !text.includes("Latest Update Log")) changelog.push(text);
@@ -94,7 +164,7 @@ export const handler: Handler = async (event, context) => {
       // 2. SCRAPE EXTRA NOTICES TAB
       // ========================================================
       if (tabName === "Extra Notices") {
-        rowData.forEach((row: any, idx: number) => {
+        rowData.forEach((row: RowData, idx: number) => {
           if (idx < 3) return; // Skip title headers
           const titleRaw = row.values?.[0]?.formattedValue?.trim() || "";
           const content = row.values?.[1]?.formattedValue?.trim() || "";
@@ -122,7 +192,7 @@ export const handler: Handler = async (event, context) => {
       else if (tabName.includes("Untiered")) tierKey = "Untiered";
 
       let currentSubCategory = tabName, currentSubCategoryRange = "All";
-      
+
       // Default fallback mapping
       let colMap = { value: 2, rarity: 3, supply: 4, demand: 5, notices: 6, statusTxt: 7 };
 
@@ -134,7 +204,7 @@ export const handler: Handler = async (event, context) => {
         const colB = getCellStr(1);
         if (!colB) continue;
 
-        const rawRowStrs = row.map((c: any) => c?.formattedValue?.toString().toLowerCase().trim() || "");
+        const rawRowStrs = row.map((c: CellData | undefined) => c?.formattedValue?.toString().toLowerCase().trim() || "");
         const hasValue = rawRowStrs.some((s: string) => s.includes("value"));
         const hasNotices = rawRowStrs.some((s: string) => s.includes("notices"));
 
@@ -142,26 +212,26 @@ export const handler: Handler = async (event, context) => {
         if (hasValue || (hasNotices && !colB.includes("/"))) {
           currentSubCategory = colB;
           colMap = { value: -1, rarity: -1, supply: -1, demand: -1, notices: -1, statusTxt: -1 };
-          
-          for(let j=2; j < row.length; j++) {
+
+          for (let j = 2; j < row.length; j++) {
             const headerText = rawRowStrs[j];
-            if(headerText.includes("value")) {
-                colMap.value = j;
-                currentSubCategoryRange = headerText.replace(/value/i, "").replace(/\s+/g, " ").trim() || "Misc";
+            if (headerText.includes("value")) {
+              colMap.value = j;
+              currentSubCategoryRange = headerText.replace(/value/i, "").replace(/\s+/g, " ").trim() || "Misc";
             }
-            else if(headerText.includes("rarity")) colMap.rarity = j;
-            else if(headerText.includes("supply")) colMap.supply = j;
-            else if(headerText.includes("demand")) colMap.demand = j;
-            else if(headerText.includes("notices")) {
-                colMap.notices = j;
-                colMap.statusTxt = j + 1; // Explicit text status is usually right after notices
+            else if (headerText.includes("rarity")) colMap.rarity = j;
+            else if (headerText.includes("supply")) colMap.supply = j;
+            else if (headerText.includes("demand")) colMap.demand = j;
+            else if (headerText.includes("notices")) {
+              colMap.notices = j;
+              colMap.statusTxt = j + 1; // Explicit text status is usually right after notices
             }
           }
           continue;
         }
 
         // Skip random spreadsheet notes
-        if (!colB.includes("/") && colMap.value !== -1 && !getCellStr(colMap.value)) continue; 
+        if (!colB.includes("/") && colMap.value !== -1 && !getCellStr(colMap.value)) continue;
 
         // Split unit name and subtitle
         let name = colB, subtitle = "";
@@ -180,7 +250,7 @@ export const handler: Handler = async (event, context) => {
         if (rawValue.includes("owner") || rawValue.includes("o/c")) {
           numericValue = "owner"; valueDisplay = "Owner's Choice";
         } else if (rawValue.includes("-") || rawValue.includes("k") || rawValue.includes("m") || rawValue.includes("?")) {
-          numericValue = "range"; 
+          numericValue = "range";
           valueDisplay = rawValue ? getCellStr(colMap.value) : "0";
           const firstPart = rawValue.split("-")[0].replace("?", "0").trim();
           let multiplier = 1;
@@ -193,7 +263,7 @@ export const handler: Handler = async (event, context) => {
 
         // Determine Status Color
         const nameColor = row[1]?.effectiveFormat?.backgroundColor;
-        const valColor = colMap.value !== -1 ? row[colMap.value]?.effectiveFormat?.backgroundColor : null;
+        const valColor = colMap.value !== -1 ? row[colMap.value]?.effectiveFormat?.backgroundColor : undefined;
         let parsedTag = getTagFromColor(nameColor);
         if (parsedTag === "stable") parsedTag = getTagFromColor(valColor);
 
@@ -203,23 +273,24 @@ export const handler: Handler = async (event, context) => {
         const unitStatus = validStatuses.includes(rawStatusText) ? rawStatusText : parsedTag;
 
         parsedUnits.push({
-          id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""), 
+          id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
           name, subtitle, value: numericValue, valueMin, valueDisplay,
-          rarity: colMap.rarity !== -1 ? parseFloat(getCellStr(colMap.rarity)) || 0 : 0, 
-          supply: colMap.supply !== -1 ? parseFloat(getCellStr(colMap.supply)) || 0 : 0, 
+          rarity: colMap.rarity !== -1 ? parseFloat(getCellStr(colMap.rarity)) || 0 : 0,
+          supply: colMap.supply !== -1 ? parseFloat(getCellStr(colMap.supply)) || 0 : 0,
           demand: colMap.demand !== -1 ? parseFloat(getCellStr(colMap.demand)) || 0 : 0,
-          notice: colMap.notices !== -1 ? getCellStr(colMap.notices) : "", 
+          notice: colMap.notices !== -1 ? getCellStr(colMap.notices) : "",
           status: unitStatus, tier: tierKey, subCategory: currentSubCategory, subCategoryRange: currentSubCategoryRange
         });
       }
     }
 
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ units: parsedUnits, changelog, notices, sheetTitle, lastUpdated })
-    };
+    return jsonResponse(
+      200,
+      { units: parsedUnits, changelog, notices, sheetTitle, lastUpdated },
+      { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" }
+    );
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: String(error) }) };
+    console.error("syncSheet error:", error);
+    return jsonResponse(500, { error: "Failed to sync sheet data." });
   }
 };
