@@ -64,8 +64,9 @@ export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilt
       ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
     })).filter(sec => sec.processedUnits.length > 0);
 
-    // FIXED: Sort subcategory sections by value so higher-tier subcategories (Top/High) always appear above lower ones (Mid/Low)
-    if (isValueSort) {
+    const isStandardTier = ["S", "A", "B", "C"].includes(tier);
+
+    if (isValueSort && isStandardTier) {
       mappedSections.sort((a, b) => {
         const valA = Math.max(...a.processedUnits.map(u => sortVal(u)));
         const valB = Math.max(...b.processedUnits.map(u => sortVal(u)));
@@ -74,10 +75,9 @@ export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilt
     }
 
     return mappedSections;
-  }, [units, sortMode, statusFilter, isValueSort]);
+  }, [units, sortMode, statusFilter, isValueSort, tier]);
 
   if (!isValueSort && sections.length > 0) {
-    // Flatten for non-value sorts if needed, or render sections normally
     const flattened = sections.flatMap(s => s.processedUnits);
     if (flattened.length === 0) return null;
     return viewMode === "grid" ? <UnitGrid units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} />;
@@ -90,7 +90,7 @@ export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilt
       {sections.map(sec => {
         const uniqueSecId = `${tier.toLowerCase()}-${sec.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
         return (
-          <div id={uniqueSecId} key={sec.label} className="scroll-mt-[120px]">
+          <div id={uniqueSecId} key={sec.label} className="scroll-mt-6">
             <TierSubHeader label={sec.label} valueRange={sec.range} count={sec.processedUnits.length} />
             {viewMode === "grid" ? <UnitGrid units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} />}
           </div>

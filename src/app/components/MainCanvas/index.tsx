@@ -22,7 +22,7 @@ const FILTER_OPTIONS = {
   "gatekept": "Gatekept", "hyped": "Hyped", "black-marketed": "Black Market"
 };
 
-const STICKY_HEADER_CLASS = "relative md:sticky md:top-[-1px] z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
+const STICKY_HEADER_CLASS = "relative z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
 
 const SkeletonLoader = ({ viewMode }: { viewMode: "grid" | "list" }) => {
   if (viewMode === "list") {
@@ -80,28 +80,58 @@ export const MainCanvas = memo(function MainCanvas({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const skipNextResetRef = useRef(false);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
+  // FIXED: Programmatic sub-tier scroll handler with skip guard to prevent reset collision
   useEffect(() => {
     if (!scrollToSection) return;
     
+    skipNextResetRef.current = true; // Guard against scroll reset on tab change
     setSearchQuery("");
     setStatusFilter("all");
-    setActiveTierFilter("All");
+    setSortMode("value-desc"); 
+    setActiveTierFilter(scrollToSection.tier as FilterKey);
 
-    const timer = setTimeout(() => {
+    let attempts = 0;
+    const maxAttempts = 40;
+
+    const tryScroll = () => {
+      const container = scrollRef.current;
       const el = document.getElementById(scrollToSection.sectionId);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }, 100);
 
-    return () => clearTimeout(timer);
+      if (container && el) {
+        const containerRect = container.getBoundingClientRect();
+        const elRect = el.getBoundingClientRect();
+
+        if (elRect.height > 0 || attempts >= maxAttempts) {
+          const targetScrollTop = container.scrollTop + (elRect.top - containerRect.top) - 16;
+          container.scrollTo({
+            top: Math.max(0, targetScrollTop),
+            behavior: "smooth"
+          });
+          return;
+        }
+      }
+
+      attempts++;
+      if (attempts < maxAttempts) {
+        requestAnimationFrame(tryScroll);
+      }
+    };
+
+    const raf = requestAnimationFrame(tryScroll);
+    return () => cancelAnimationFrame(raf);
   }, [scrollToSection]);
 
+  // FIXED: Respect the skip flag so sidebar programmatic jumps stay locked on target
   useEffect(() => {
     if (scrollToSection) return;
+    if (skipNextResetRef.current) {
+      skipNextResetRef.current = false;
+      return;
+    }
     scrollRef.current?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
   }, [deferredSearchQuery, statusFilter, sortMode, activeTierFilter, scrollToSection]);
 

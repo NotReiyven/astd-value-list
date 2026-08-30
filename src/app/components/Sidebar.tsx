@@ -47,14 +47,36 @@ export function Sidebar({
     const order = ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"];
     const colorMap: Record<string, string> = { S: "#dd7e6b", A: "#a855f7", B: "#3b82f6", C: "#22c55e", Pure: "#9ca3af", Oddities: "#8b5cf6", Untiered: "#52525b" };
     
+    // Strict quality hierarchy weight for standard tiers
+    const subCatPriority: Record<string, number> = {
+      "top": 1,
+      "high": 2,
+      "mid": 3,
+      "low": 4
+    };
+    
     return order.map(tier => {
       const tierUnits = units.filter(u => getTier(u) === tier);
-      const subCats = Array.from(new Set(tierUnits.map(u => u.subCategory || "Uncategorized")));
+      let subCats = Array.from(new Set(tierUnits.map(u => u.subCategory || "Uncategorized")));
+      
+      // Enforce strict Top -> High -> Mid -> Low ordering for standard tiers
+      if (["S", "A", "B", "C"].includes(tier)) {
+        subCats.sort((a, b) => {
+          const getRank = (name: string) => {
+            const lower = name.toLowerCase();
+            for (const key of Object.keys(subCatPriority)) {
+              if (lower.includes(key)) return subCatPriority[key];
+            }
+            return 99;
+          };
+          return getRank(a) - getRank(b);
+        });
+      }
+
       return {
         tier,
         color: colorMap[tier] || "#52525b",
         children: subCats.map(sub => ({ 
-          // FIXED: Namespace the ID with the tier to guarantee global uniqueness
           id: `${tier.toLowerCase()}-${sub.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, 
           label: sub 
         }))
@@ -148,7 +170,7 @@ export function Sidebar({
                                       const isLastChild = cIdx === group.children.length - 1;
                                       return (
                                         <button
-                                          key={child.id}
+                                          key={`${group.tier}-${child.id}`}
                                           onClick={() => onThreadClick(group.tier as FilterKey, child.id)}
                                           className="relative flex items-center h-[26px] hover:bg-[rgba(78,80,88,0.3)] rounded-[4px] px-2 text-[#80848E] hover:text-[#DBDEE1] text-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:translate-x-1"
                                         >

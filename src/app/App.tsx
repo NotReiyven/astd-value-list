@@ -64,6 +64,9 @@ export default function App() {
   const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel", isNonEmptyString);
   const [activeTierFilter, setActiveTierFilter] = useStickyState<FilterKey>("S", "astd_tier");
 
+  // FIXED: State to hold target scroll instructions for MainCanvas
+  const [scrollToSection, setScrollToSection] = useState<{ tier: string; sectionId: string } | null>(null);
+
   const [isRosterOpen, setIsRosterOpen] = useStickyState(window.innerWidth >= 768, "astd_roster", isBoolean);
   const [isAnalyzerOpen, setIsAnalyzerOpen] = useStickyState(false, "astd_analyzer", isBoolean);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
@@ -123,34 +126,19 @@ export default function App() {
     touchStartPos.current = null;
   }, [isAnalyzerOpen, isRosterOpen, setIsAnalyzerOpen, setIsRosterOpen]);
 
+  // FIXED: Simplified thread handler that sets channel, updates the filter tab precisely, and queues scroll target
   const handleThreadClick = useCallback((tier: FilterKey, sectionId: string) => {
     setActiveChannel("value-list");
-    setActiveTierFilter("All");
+    setActiveTierFilter(tier); // Sets the exact tab filter (e.g., "A", "Pure", etc.)
     setGlobalSearchQuery(""); 
     if (window.innerWidth < 768) setIsRosterOpen(false);
 
-    setTimeout(() => {
-      const container = document.getElementById("main-scroll-container");
-      const el = document.getElementById(sectionId) || document.getElementById(`${tier.toLowerCase()}-tier`);
+    setScrollToSection({ tier, sectionId });
 
-      if (container && el) {
-         const containerRect = container.getBoundingClientRect();
-         const elRect = el.getBoundingClientRect();
-         const offset = (elRect.top - containerRect.top) + container.scrollTop - 60; 
-         container.scrollTo({ top: offset, behavior: "smooth" });
-      } else {
-        setTimeout(() => {
-          const retryContainer = document.getElementById("main-scroll-container");
-          const retryEl = document.getElementById(sectionId) || document.getElementById(`${tier.toLowerCase()}-tier`);
-          if (retryContainer && retryEl) {
-            const cRect = retryContainer.getBoundingClientRect();
-            const eRect = retryEl.getBoundingClientRect();
-            const finalOffset = (eRect.top - cRect.top) + retryContainer.scrollTop - 60;
-            retryContainer.scrollTo({ top: finalOffset, behavior: "smooth" });
-          }
-        }, 150);
-      }
-    }, 100); 
+    // Clean up instruction after execution window
+    setTimeout(() => {
+      setScrollToSection(null);
+    }, 400);
   }, [setActiveChannel, setActiveTierFilter, setIsRosterOpen]);
 
   const handleAddGive = useCallback((unit: PopupUnit) => {
@@ -311,6 +299,7 @@ export default function App() {
                 setSearchQuery={setGlobalSearchQuery} 
                 onAddGive={handleAddGive} 
                 onAddGet={handleAddGet} 
+                scrollToSection={scrollToSection}
               />
             ) : activeChannel === "extra-notices" ? ( <ExtraNoticesChannel />
             ) : (

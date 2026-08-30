@@ -9,8 +9,11 @@ type UnitContextType = {
   sheetTitle: string;
   lastUpdated: string;
   isLoading: boolean;
+  isSyncing: boolean; // Added to quietly track background revalidation
   isError: boolean;
 };
+
+const CACHE_VERSION = "astd_cache_v2"; // Bump this whenever data structures change to force clean syncs
 
 const UnitContext = createContext<UnitContextType>({
   units: LOCAL_FALLBACK_UNITS,
@@ -19,27 +22,53 @@ const UnitContext = createContext<UnitContextType>({
   sheetTitle: "ASTD Official Value List",
   lastUpdated: new Date().toISOString(),
   isLoading: true,
+  isSyncing: false,
   isError: false,
 });
 
 export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
+  // Check cache version validity on boot
+  const isCacheValid = () => {
+    try {
+      return localStorage.getItem('astd_cache_version') === CACHE_VERSION;
+    } catch {
+      return false;
+    }
+  };
+
   const [units, setUnits] = useState<MasterUnit[]>(() => {
-    try { const c = localStorage.getItem('astd_units_cache'); return c ? JSON.parse(c) : LOCAL_FALLBACK_UNITS; } catch { return LOCAL_FALLBACK_UNITS; }
+    try { 
+      if (!isCacheValid()) return LOCAL_FALLBACK_UNITS;
+      const c = localStorage.getItem('astd_units_cache'); 
+      return c ? JSON.parse(c) : LOCAL_FALLBACK_UNITS; 
+    } catch { 
+      return LOCAL_FALLBACK_UNITS; 
+    }
   });
+
   const [changelog, setChangelog] = useState<string[]>(() => {
     try { const c = localStorage.getItem('astd_changelog_cache'); return c ? JSON.parse(c) : []; } catch { return []; }
   });
+  
   const [notices, setNotices] = useState<any[]>(() => {
     try { const c = localStorage.getItem('astd_notices_cache'); return c ? JSON.parse(c) : []; } catch { return []; }
   });
   
   const [sheetTitle, setSheetTitle] = useState(() => localStorage.getItem('astd_title_cache') || "ASTD Official Value List");
   const [lastUpdated, setLastUpdated] = useState(() => localStorage.getItem('astd_date_cache') || new Date().toISOString());
-  const [isLoading, setIsLoading] = useState(!localStorage.getItem('astd_units_cache'));
+  
+  // If cache is invalid or missing, force full loading state
+  const [isLoading, setIsLoading] = useState(!isCacheValid() || !localStorage.getItem('astd_units_cache'));
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
     const fetchLiveUnits = async () => {
+      // If we already have a valid cache, run sync quietly in the background (Stale-While-Revalidate)
+      if (!isLoading) {
+        setIsSyncing(true);
+      }
+
       try {
         const res = await fetch('/.netlify/functions/syncSheet');
         if (!res.ok) throw new Error('API Response not OK');
@@ -53,7 +82,6 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
         if (data.notices) { setNotices(data.notices); localStorage.setItem('astd_notices_cache', JSON.stringify(data.notices)); }
 
         if (data && data.units && data.units.length > 0) {
-          // Map live units and attach images/aliases from local fallback data safely
           const mergedUnits = data.units.map((apiUnit: MasterUnit) => {
             const apiCleanName = apiUnit.name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -75,19 +103,25 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
             };
           });
           
-          // FIXED: Deduplicate using a Map based on the unique unit ID to completely eliminate ghost duplicates
+          // Strict deduplication map
           const uniqueUnitsMap = new Map<string, MasterUnit>();
           mergedUnits.forEach((u: MasterUnit) => uniqueUnitsMap.set(u.id, u));
           const finalUniqueUnits = Array.from(uniqueUnitsMap.values());
 
           setUnits(finalUniqueUnits);
+          
+          // Save to localStorage along with version stamp
           localStorage.setItem('astd_units_cache', JSON.stringify(finalUniqueUnits));
+          localStorage.setItem('astd_cache_version', CACHE_VERSION);
         }
       } catch (error) {
-        console.error("Live sync failed:", error);
-        setIsError(true);
+        console.error("Live sync failed, falling back to local cache:", error);
+        if (isLoading) {
+          setIsError(true);
+        }
       } finally {
         setIsLoading(false);
+        setIsSyncing(false);
       }
     };
 
@@ -95,7 +129,7 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <UnitContext.Provider value={{ units, changelog, notices, sheetTitle, lastUpdated, isLoading, isError }}>
+    <UnitContext.Provider value={{ units, changelog, notices, sheetTitle, lastUpdated, isLoading, isSyncing, isError }}>
       {children}
     </UnitContext.Provider>
   );
