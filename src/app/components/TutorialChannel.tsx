@@ -151,7 +151,7 @@ export function TutorialChannel({
   };
 
   const tradeAnalyzerIcon = "https://static.wikia.nocookie.net/allstartd/images/3/31/Water_Goddess_Old.png/revision/latest?cb=20240306082508";
-  const mobileGesturesIcon = "https://media.discordapp.net/attachments/1039078990557757471/1543304949968932864/image.png?ex=6a94623d&is=6a9310bd&hm=4033558d52bc15af75fd76e54b95910a22731769f34937b28cb71fb803e6c5a3&=&format=webp&quality=lossless";
+  const mobileGesturesIcon = "https://media.discordapp.net/attachments/1543674169173221520/1543674555044860105/image.png?ex=6a95ba76&is=6a9468f6&hm=8f1b5a59a4217e71c1c0dcbd49493b465c9ba3f4de535bad95ac988f763649a2&=&format=webp&quality=lossless";
   const quickAddingIcon = "https://media.discordapp.net/attachments/1538970612947615744/1543324532385910834/image.png?ex=6a94747a&is=6a9322fa&hm=4b7ccdc9fed856babfc8bb7274afd1c3d3394e4a44a14e00b6c7d222e6cec82d&=&format=webp&quality=lossless";
   const advancedGesturesIcon = "https://media.discordapp.net/attachments/1538970612947615744/1543324532876779520/image.png?ex=6a94747a&is=6a9322fa&hm=c88602297fa118bcd37ace496d84ea83c0291198e936f04b42340f5b5ee4631a&=&format=webp&quality=lossless";
   const viewModesIcon = "https://static.wikia.nocookie.net/allstartd/images/f/f7/Chains_%28Pose%29.png/revision/latest?cb=20260715185249";

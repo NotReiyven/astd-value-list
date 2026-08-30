@@ -273,7 +273,7 @@ export function HomeChannel() {
               <TiltCard color="#8b7a7a" className="col-span-1 md:col-span-2 xl:col-span-3 mb-2 flex-row items-center sm:items-stretch overflow-hidden">
                 <div className="p-6 relative z-10 flex flex-col sm:flex-row items-center gap-6 w-full">
                   <div onClick={() => setDevSpin((prev) => prev + 360)} className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full border-[3px] border-[#2B2D31] shadow-[0_0_0_2px_rgba(237,66,69,0.4),_0_8px_24px_rgba(237,66,69,0.3)] overflow-hidden shrink-0 cursor-pointer" style={{ transform: `rotateY(${devSpin}deg)`, transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)" }} title="Click me!">
-                    <img src="https://media.discordapp.net/attachments/949561628704268288/1543300068528889926/FB_IMG_1788021799554.jpg?ex=6a945db1&is=6a930c31&hm=ff7d53bb654ac442e28e91901bb33394c228b4dbcd5f792f9ffe48474629e357&=&format=webp" alt="Reiyven" draggable={false} className="w-full h-full object-cover" />
+                    <img src="https://media.discordapp.net/attachments/1543674169173221520/1543674222495399936/568438777_4285260958469405_5495238692606870157_n.png?ex=6a95ba26&is=6a9468a6&hm=dd0babf47070b8017b1fb83cb00e9ac41366029d8b9480a7f940faba90b7bc6e&=&format=webp&quality=lossless" alt="Reiyven" draggable={false} className="w-full h-full object-cover" />
                   </div>
                   <div className="flex flex-col items-center sm:items-start text-center sm:text-left flex-1">
                     <div className="flex flex-wrap justify-center sm:justify-start items-center gap-2 mb-1">

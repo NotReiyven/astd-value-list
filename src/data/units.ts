@@ -400,7 +400,7 @@ export const ALL_UNITS: MasterUnit[] = [
   { id: "egg2-60", name: "60% Egg II - Pyro", subtitle: "Egg", value: 300, rarity: 5, supply: 2, demand: 2, imageUrl: UNIT_IMAGES["egg2-60"], notice: "Opens to Mereoleona.", aliases: ["60% egg ii"] },
   { id: "egg2-50", name: "50% Egg II - Dream", subtitle: "Egg", value: 200, rarity: 5, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-50"], notice: "Opens to Gremmy.", aliases: ["50% egg ii"] },
   { id: "egg2-40", name: "40% Egg II - Electric", subtitle: "Egg", value: 45, rarity: 3, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-40"], notice: "Opens to Lisa Lisa.", aliases: ["40% egg ii"] },
-  { id: "egg2-30", name: "30% Egg II - Gold", subtitle: "Egg", value: 50, rarity: 3, supply: 1.5, demand: 1.5, imageUrl: UNIT_IMAGES["egg2-30"], notice: "Opens to Kamen Rider Ex-Aid.", aliases: ["30% egg ii", "ex aid"] },
+  { id: "egg2-30", name: "30% Egg II - Gold", subtitle: "Egg", value: 50, rarity: 3, supply: 1.5, demand: 1.5, imageUrl: UNIT_IMAGES["egg2-30"], notice: "Opens to Kamen Rider Ex-Aid.", aliases: ["30% egg ii", "ex aid  "] },
   { id: "egg2-20", name: "20% Egg II - Silver", subtitle: "Egg", value: 150, rarity: 3, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-20"], notice: "Opens to Thragg.", aliases: ["20% egg ii"] },
   { id: "egg2-10", name: "10% Egg II - Bronze", subtitle: "Egg", value: 10, rarity: 1, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-10"], notice: "Opens to Pui Pui.", aliases: ["10% egg ii"] },
 
