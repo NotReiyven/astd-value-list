@@ -23,13 +23,14 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
     items.forEach(item => {
       const master = ALL_UNITS.find(u => u.id === item.id);
       if (master) {
-        if (master.status && master.status !== "stable") {
+        // FIXED: Count and track 'stable' statuses as well instead of skipping them
+        if (master.status) {
           statusCounts[master.status] = (statusCounts[master.status] || 0) + item.qty;
         }
-        if ((master.status && master.status !== "stable") || master.notice) {
+        if (master.status || master.notice) {
           details.push({
             name: master.name,
-            status: master.status === "stable" ? undefined : master.status,
+            status: master.status,
             notice: master.notice
           });
         }

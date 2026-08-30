@@ -243,6 +243,21 @@ export const handler: Handler = async (event, context) => {
           name = split[0].trim(); subtitle = split[1] ? split[1].trim() : "";
         }
 
+        // ========================================================================
+        // CRITICAL FIX: Distinguish Pure variants and fix general name collisions
+        // ========================================================================
+        if (tierKey === "Pure" && !name.toLowerCase().includes("(pure)")) {
+          name = `${name} (Pure)`;
+        }
+
+        let unitId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+        // Edge case: Handle specific name collisions in the game (Ice Dragon)
+        if (unitId === "ice-dragon" && subtitle.toLowerCase().includes("eis shenron")) {
+          unitId = "eis";
+        }
+        // ========================================================================
+
         // Parse numerical values & ranges
         const rawValue = colMap.value !== -1 ? getCellStr(colMap.value).toLowerCase() : "";
         let numericValue: number | "owner" | "range" = 0, valueMin: number | undefined = undefined, valueDisplay: string | undefined = undefined;
@@ -273,7 +288,7 @@ export const handler: Handler = async (event, context) => {
         const unitStatus = validStatuses.includes(rawStatusText) ? rawStatusText : parsedTag;
 
         parsedUnits.push({
-          id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
+          id: unitId, // Replaced explicit inline replacement with the collision-safe ID
           name, subtitle, value: numericValue, valueMin, valueDisplay,
           rarity: colMap.rarity !== -1 ? parseFloat(getCellStr(colMap.rarity)) || 0 : 0,
           supply: colMap.supply !== -1 ? parseFloat(getCellStr(colMap.supply)) || 0 : 0,

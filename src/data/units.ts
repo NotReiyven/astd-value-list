@@ -30,7 +30,7 @@ export const ALL_UNITS: MasterUnit[] = [
   { id: "ikki-anni", name: "Ikki (Anni)", subtitle: "Anniversary Ichigo", value: 15000, rarity: 11, supply: 3, demand: 3, status: "inflated", imageUrl: UNIT_IMAGES["ikki-anni"], notice: "Obtainable from the Easter Capsule(+).", aliases: ["anniversary ichigo", "anni ichigo", "anni"] },
   { id: "gold-tomi", name: "Gold Tomi", subtitle: "Gold Tobi", value: 15000, rarity: 17, supply: 4, demand: 2.5, status: "stable", imageUrl: UNIT_IMAGES["gold-tomi"], notice: "Obtainable from evolving 5 Tobi.", aliases: ["gold tobi", "gtobi", "gtomi"] },
   { id: "ultra-kovegu", name: "Ultra Kovegu", subtitle: "SSJ3 Gogeta", value: 15000, rarity: 19, supply: 3, demand: 4, status: "stable", imageUrl: UNIT_IMAGES["ultra-kovegu"], notice: "Obtainable from evolving 10 Gogeta's.", aliases: ["ssj3 gogeta", "ssj3", "ultra gogeta"] },
-  { id: "gold-martial-artist", name: "Gold Martial Artist", subtitle: "Gold Jin Mori", value: 15000, rarity: 17, supply: 3, demand: 3.5, status: "stable", imageUrl: UNIT_IMAGES["gold-martial-artist"], notice: "Obtainable from evolving 5 Jin Mori.", aliases: ["gold jin mori", "gmori", "gjin"] },
+  { id: "gold-martial-artist", name: "Gold Martial Artist", subtitle: "Gold Jin Mori", value: 15000, rarity: 17, supply: 3, demand: 3.5, status: "stable", imageUrl: UNIT_IMAGES["gold-martial-artist"], notice: "Obtainable from evolving 5 Jin Mori.", aliases: ["gold jin mori", "gmori", "gjin, gold mori, gold jm"] },
   { id: "challenger-flaming-tiger", name: "Challenger Flaming Tiger", subtitle: "Challenger Rengoku", value: 10500, rarity: 14, supply: 3, demand: 3.5, status: "maximum", imageUrl: UNIT_IMAGES["challenger-flaming-tiger"], notice: "Part of the 'PvP Set 1.0'. Finally got his blessing after 6 years.", aliases: ["challenger rengoku", "cren", "c.ren", "rengoku"] },
 
   // ── Top A Tier (5,000 – 9,999) ──
@@ -400,7 +400,7 @@ export const ALL_UNITS: MasterUnit[] = [
   { id: "egg2-60", name: "60% Egg II - Pyro", subtitle: "Egg", value: 300, rarity: 5, supply: 2, demand: 2, imageUrl: UNIT_IMAGES["egg2-60"], notice: "Opens to Mereoleona.", aliases: ["60% egg ii"] },
   { id: "egg2-50", name: "50% Egg II - Dream", subtitle: "Egg", value: 200, rarity: 5, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-50"], notice: "Opens to Gremmy.", aliases: ["50% egg ii"] },
   { id: "egg2-40", name: "40% Egg II - Electric", subtitle: "Egg", value: 45, rarity: 3, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-40"], notice: "Opens to Lisa Lisa.", aliases: ["40% egg ii"] },
-  { id: "egg2-30", name: "30% Egg II - Gold", subtitle: "Egg", value: 50, rarity: 3, supply: 1.5, demand: 1.5, imageUrl: UNIT_IMAGES["egg2-30"], notice: "Opens to Kamen Rider Ex-Aid.", aliases: ["30% egg ii"] },
+  { id: "egg2-30", name: "30% Egg II - Gold", subtitle: "Egg", value: 50, rarity: 3, supply: 1.5, demand: 1.5, imageUrl: UNIT_IMAGES["egg2-30"], notice: "Opens to Kamen Rider Ex-Aid.", aliases: ["30% egg ii", "ex aid"] },
   { id: "egg2-20", name: "20% Egg II - Silver", subtitle: "Egg", value: 150, rarity: 3, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-20"], notice: "Opens to Thragg.", aliases: ["20% egg ii"] },
   { id: "egg2-10", name: "10% Egg II - Bronze", subtitle: "Egg", value: 10, rarity: 1, supply: 1, demand: 1, imageUrl: UNIT_IMAGES["egg2-10"], notice: "Opens to Pui Pui.", aliases: ["10% egg ii"] },
 
