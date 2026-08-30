@@ -53,7 +53,7 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
         if (data.notices) { setNotices(data.notices); localStorage.setItem('astd_notices_cache', JSON.stringify(data.notices)); }
 
         if (data && data.units && data.units.length > 0) {
-          // Merge Live Unit Data with Local Image/Alias Data from units.ts
+          // Map live units and attach images/aliases from local fallback data safely
           const mergedUnits = data.units.map((apiUnit: MasterUnit) => {
             const apiCleanName = apiUnit.name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -70,13 +70,18 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
 
             return {
               ...apiUnit,
-              imageUrl: localMatch?.imageUrl || "",
-              aliases: localMatch?.aliases || []
+              imageUrl: localMatch?.imageUrl || apiUnit.imageUrl || "",
+              aliases: localMatch?.aliases || apiUnit.aliases || []
             };
           });
           
-          setUnits(mergedUnits);
-          localStorage.setItem('astd_units_cache', JSON.stringify(mergedUnits));
+          // FIXED: Deduplicate using a Map based on the unique unit ID to completely eliminate ghost duplicates
+          const uniqueUnitsMap = new Map<string, MasterUnit>();
+          mergedUnits.forEach((u: MasterUnit) => uniqueUnitsMap.set(u.id, u));
+          const finalUniqueUnits = Array.from(uniqueUnitsMap.values());
+
+          setUnits(finalUniqueUnits);
+          localStorage.setItem('astd_units_cache', JSON.stringify(finalUniqueUnits));
         }
       } catch (error) {
         console.error("Live sync failed:", error);

@@ -3,7 +3,6 @@ import { TradeCard, MasterUnit } from "../../../types";
 
 export const fmtK = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${n}`;
 
-// Helper: Generates a deterministic gradient for missing images
 export const getAvatarStyle = (name: string) => {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -12,12 +11,22 @@ export const getAvatarStyle = (name: string) => {
 };
 export const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
 
+// FIXED: Weighted average calculation accounting for item quantities (qty)
 export const avgStat = (items: TradeCard[], key: "rarity" | "supply" | "demand", ALL_UNITS: MasterUnit[]) => {
   if (items.length === 0) return "—";
-  const fullUnits = items.map(c => ALL_UNITS.find(u => u.id === c.id)).filter(Boolean);
-  if (fullUnits.length === 0) return "—";
-  const sum = fullUnits.reduce((s, u) => s + ((u![key] as number) || 0), 0);
-  return (sum / fullUnits.length).toFixed(1);
+  let totalSum = 0;
+  let totalCount = 0;
+
+  items.forEach(c => {
+    const master = ALL_UNITS.find(u => u.id === c.id);
+    if (master && typeof master[key] === "number") {
+      totalSum += (master[key] as number) * c.qty;
+      totalCount += c.qty;
+    }
+  });
+
+  if (totalCount === 0) return "—";
+  return (totalSum / totalCount).toFixed(1);
 };
 
 export const generateTextSummary = (giveItems: TradeCard[], getItems: TradeCard[], giveTotal: number, getTotal: number, ALL_UNITS: MasterUnit[]) => {

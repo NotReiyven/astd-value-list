@@ -1,13 +1,12 @@
-import { useState, useRef, memo, useMemo } from "react";
+import { useState, useRef, memo, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X, Image as ImageIcon, ArrowLeft, ArrowRight } from "lucide-react";
 import { PopupUnit, GridUnit, MasterUnit, UnitStatus } from "../../../types";
 import { GRID_STATUS_CFG, getRarityLabel, SUPPLY_SCALE, DEMAND_SCALE, getTier, TIER_CONFIG, getProxyImage, getObtainability } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
-import { LazyRender } from "./LazyRender"; // IMPORT LAZYRENDER FOR CHUNKING
+import { LazyRender } from "./LazyRender";
 
 export const UnitGrid = memo(function UnitGrid({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
-  // PERFORMANCE FIX: Chunk massive unit arrays into chunks of 24 to recycle DOM nodes as user scrolls
   const chunks = useMemo(() => {
     const result = [];
     for (let i = 0; i < units.length; i += 24) {
@@ -39,6 +38,7 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const scrollDirectionRef = useRef<"horizontal" | "vertical" | null>(null); // FIXED: Direction lock to protect native touch scrolling
 
   const popupUnit: PopupUnit = {
     id: unit.id, name: unit.name, subtitle: unit.subtitle,
@@ -60,15 +60,27 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    scrollDirectionRef.current = null;
   };
+
   const onTouchMove = (e: React.TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) > Math.abs(dy) + 5) {
-       setSwipeOffset(dx);
+
+    if (!scrollDirectionRef.current) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        scrollDirectionRef.current = "horizontal";
+      } else {
+        scrollDirectionRef.current = "vertical";
+      }
+    }
+
+    if (scrollDirectionRef.current === "horizontal") {
+      setSwipeOffset(dx);
     }
   };
+
   const onTouchEnd = () => {
     if (swipeOffset > 80) {
       onAddGive(popupUnit); triggerAddedGlow();
@@ -78,6 +90,7 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
     setSwipeOffset(0);
     touchStartX.current = null;
     touchStartY.current = null;
+    scrollDirectionRef.current = null;
   };
 
   const tierKey = getTier(unit as MasterUnit);
@@ -85,7 +98,6 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const proxyUrl = getProxyImage(unit.imageUrl);
 
   return (
-    // PERFORMANCE FIX: content-visibility allows browser to natively skip calculating layout/paint for off-screen cards
     <div className="relative w-full overflow-hidden rounded-[8px] group" style={{ contentVisibility: "auto", containIntrinsicSize: "260px" }}>
       <div className={`absolute inset-0 flex items-center px-5 font-bold transition-colors duration-200 z-0 ${swipeOffset > 0 ? 'bg-[#FAA61A] justify-start text-white' : swipeOffset < 0 ? 'bg-[#5865F2] justify-end text-white' : 'bg-transparent'}`}>
          {swipeOffset > 0 && <><ArrowRight className="w-4 h-4 mr-2" /> Add Give</>}
@@ -209,6 +221,11 @@ function GridStatusBadge({ status }: { status: UnitStatus }) {
   const badgeRef = useRef<HTMLDivElement>(null);
   const [tipPos, setTipPos] = useState<{ x: number; y: number } | null>(null);
 
+  // FIXED: Clear tooltip state cleanly on unmount to prevent memory leaks / lingering portal elements
+  useEffect(() => {
+    return () => setTipPos(null);
+  }, []);
+
   return (
     <div
       ref={badgeRef}
@@ -237,6 +254,10 @@ function GridStatItem({ label, value }: { label: string; value: number }) {
   const btnRef = useRef<HTMLSpanElement>(null);
   const [tipPos, setTipPos] = useState<{ x: number; y: number } | null>(null);
   const fmt = (v: number) => (v % 1 === 0 ? String(v) : v.toFixed(1));
+
+  useEffect(() => {
+    return () => setTipPos(null);
+  }, []);
 
   let tipTitle = ""; let tipBody = ""; let tipNote = "";
   let textColor = "#DBDEE1";
@@ -294,6 +315,11 @@ function GridValueDisplay({ unit }: { unit: GridUnit }) {
 function NoticeTooltip({ notice }: { notice?: string }) {
   const btnRef = useRef<HTMLDivElement>(null);
   const [tipPos, setTipPos] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    return () => setTipPos(null);
+  }, []);
+
   if (!notice) return null;
 
   return (

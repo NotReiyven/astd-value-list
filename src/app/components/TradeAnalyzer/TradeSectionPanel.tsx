@@ -207,7 +207,8 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                 setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                setSelectedIndex(prev => Math.max(prev - 1, 0));
+                // FIXED: Proper clamping preventing instant jump to index 0 from -1
+                setSelectedIndex(prev => (prev <= 0 ? -1 : prev - 1));
               } else if (e.key === "Enter") {
                 e.preventDefault();
                 if (selectedIndex >= 0 && results[selectedIndex]) {

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { FilterKey } from "../../types";
 import { useUnits } from "../../context/UnitContext";
+import { getTier } from "../../data";
 
 type ChannelConfig = { id: string; label: string; isLocked: boolean; hasThreads?: boolean; icon?: LucideIcon; };
 type CategoryConfig = { id: string; label: string; channels: ChannelConfig[]; };
@@ -42,19 +43,19 @@ export function Sidebar({
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const { units } = useUnits();
 
-  // Dynamically map subcategories from the live sheet
   const dynamicTierGroups = useMemo(() => {
     const order = ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"];
     const colorMap: Record<string, string> = { S: "#dd7e6b", A: "#a855f7", B: "#3b82f6", C: "#22c55e", Pure: "#9ca3af", Oddities: "#8b5cf6", Untiered: "#52525b" };
     
     return order.map(tier => {
-      const tierUnits = units.filter(u => u.tier === tier);
+      const tierUnits = units.filter(u => getTier(u) === tier);
       const subCats = Array.from(new Set(tierUnits.map(u => u.subCategory || "Uncategorized")));
       return {
         tier,
         color: colorMap[tier] || "#52525b",
         children: subCats.map(sub => ({ 
-          id: sub.toLowerCase().replace(/[^a-z0-9]+/g, "-"), 
+          // FIXED: Namespace the ID with the tier to guarantee global uniqueness
+          id: `${tier.toLowerCase()}-${sub.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, 
           label: sub 
         }))
       };
@@ -102,7 +103,7 @@ export function Sidebar({
                   className={`transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}
                   style={{ display: 'grid', gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
                 >
-                  <div className="overflow-hidden flex flex-col">
+                  <div className="overflow-hidden flex flex-col min-h-0">
                     {cat.channels.map((channel) => {
                       const isActive = activeChannel === channel.id;
                       const Icon = channel.icon || Hash;
@@ -133,35 +134,35 @@ export function Sidebar({
                           {channel.hasThreads && isActive && (
                             <div className="relative flex flex-col ml-[26px] mt-0.5 mb-3 animate-fade-in">
                               <div className="absolute left-[-16px] top-0 bottom-[14px] w-[2px] bg-[#3F4147]" />
-                              {dynamicTierGroups.map((group, gIdx) => (
-                                  <div key={group.tier} className="relative flex flex-col mb-1.5">
-                                    <div className="relative flex items-center h-[24px]">
-                                      <div className="absolute left-[-16px] top-[-12px] w-[14px] h-[24px] border-l-2 border-b-2 border-[#3F4147] rounded-bl-[6px]" />
-                                      <span className="text-[12px] font-bold uppercase tracking-widest pl-1.5" style={{ color: group.color }}>
-                                        {group.tier} {["Pure", "Oddities", "Untiered"].includes(group.tier) ? "" : "Tier"}
-                                      </span>
-                                    </div>
-                                    <div className="relative flex flex-col ml-[6px] mt-0.5">
-                                      <div className="absolute left-[-10px] top-[-6px] bottom-[12px] w-[2px] bg-[#3F4147]" />
-                                      {group.children.map((child, cIdx) => {
-                                        const isLastChild = cIdx === group.children.length - 1;
-                                        return (
-                                          <button
-                                            key={child.id}
-                                            onClick={() => onThreadClick(group.tier as FilterKey, child.id)}
-                                            className="relative flex items-center h-[26px] hover:bg-[rgba(78,80,88,0.3)] rounded-[4px] px-2 text-[#80848E] hover:text-[#DBDEE1] text-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:translate-x-1"
-                                          >
-                                            {isLastChild ? (
-                                              <div className="absolute left-[-10px] top-[-12px] w-[12px] h-[25px] border-l-2 border-b-2 border-[#3F4147] rounded-bl-[6px]" />
-                                            ) : (
-                                              <div className="absolute left-[-10px] top-1/2 w-[12px] h-[2px] bg-[#3F4147]" />
-                                            )}
-                                            <span className="text-[14px] font-medium leading-none pl-2 truncate">{child.label}</span>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
+                              {dynamicTierGroups.map((group) => (
+                                <div key={group.tier} className="relative flex flex-col mb-1.5">
+                                  <div className="relative flex items-center h-[24px]">
+                                    <div className="absolute left-[-16px] top-[-12px] w-[14px] h-[24px] border-l-2 border-b-2 border-[#3F4147] rounded-bl-[6px]" />
+                                    <span className="text-[12px] font-bold uppercase tracking-widest pl-1.5" style={{ color: group.color }}>
+                                      {group.tier} {["Pure", "Oddities", "Untiered"].includes(group.tier) ? "" : "Tier"}
+                                    </span>
                                   </div>
+                                  <div className="relative flex flex-col ml-[6px] mt-0.5">
+                                    <div className="absolute left-[-10px] top-[-6px] bottom-[12px] w-[2px] bg-[#3F4147]" />
+                                    {group.children.map((child, cIdx) => {
+                                      const isLastChild = cIdx === group.children.length - 1;
+                                      return (
+                                        <button
+                                          key={child.id}
+                                          onClick={() => onThreadClick(group.tier as FilterKey, child.id)}
+                                          className="relative flex items-center h-[26px] hover:bg-[rgba(78,80,88,0.3)] rounded-[4px] px-2 text-[#80848E] hover:text-[#DBDEE1] text-left transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:translate-x-1"
+                                        >
+                                          {isLastChild ? (
+                                            <div className="absolute left-[-10px] top-[-12px] w-[12px] h-[25px] border-l-2 border-b-2 border-[#3F4147] rounded-bl-[6px]" />
+                                          ) : (
+                                            <div className="absolute left-[-10px] top-1/2 w-[12px] h-[2px] bg-[#3F4147]" />
+                                          )}
+                                          <span className="text-[14px] font-medium leading-none pl-2 truncate">{child.label}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               ))}
                             </div>
                           )}

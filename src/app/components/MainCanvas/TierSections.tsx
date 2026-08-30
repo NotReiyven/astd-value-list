@@ -48,39 +48,54 @@ export function TierSubHeader({ label, valueRange, count }: { label: string; val
   );
 }
 
-// 👑 THE ULTIMATE DYNAMIC CATEGORY RENDERER
-export function DynamicTierSection({ units, viewMode, sortMode, statusFilter, onAddGive, onAddGet }: any) {
+export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilter, onAddGive, onAddGet }: any) {
   const isValueSort = sortMode === "value-desc" || sortMode === "value-asc";
   
-  if (!isValueSort) {
-    const flattened = processUnits(units, sortMode, statusFilter);
+  const sections = useMemo(() => {
+    const sectionsMap = new Map<string, { label: string; range: string; units: MasterUnit[] }>();
+    
+    units.forEach((u: MasterUnit) => {
+      const cat = u.subCategory || "Uncategorized";
+      if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range: u.subCategoryRange || "N/A", units: [] });
+      sectionsMap.get(cat)!.units.push(u);
+    });
+
+    const mappedSections = Array.from(sectionsMap.values()).map(sec => ({
+      ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
+    })).filter(sec => sec.processedUnits.length > 0);
+
+    // FIXED: Sort subcategory sections by value so higher-tier subcategories (Top/High) always appear above lower ones (Mid/Low)
+    if (isValueSort) {
+      mappedSections.sort((a, b) => {
+        const valA = Math.max(...a.processedUnits.map(u => sortVal(u)));
+        const valB = Math.max(...b.processedUnits.map(u => sortVal(u)));
+        return sortMode === "value-desc" ? valB - valA : valA - valB;
+      });
+    }
+
+    return mappedSections;
+  }, [units, sortMode, statusFilter, isValueSort]);
+
+  if (!isValueSort && sections.length > 0) {
+    // Flatten for non-value sorts if needed, or render sections normally
+    const flattened = sections.flatMap(s => s.processedUnits);
     if (flattened.length === 0) return null;
     return viewMode === "grid" ? <UnitGrid units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} />;
   }
-
-  // Group units dynamically by whatever header they were under in Google Sheets
-  const sectionsMap = new Map<string, { label: string; range: string; units: MasterUnit[] }>();
-  
-  units.forEach((u: MasterUnit) => {
-    const cat = u.subCategory || "Uncategorized";
-    if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range: u.subCategoryRange || "N/A", units: [] });
-    sectionsMap.get(cat)!.units.push(u);
-  });
-
-  const sections = Array.from(sectionsMap.values()).map(sec => ({
-    ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
-  })).filter(sec => sec.processedUnits.length > 0);
 
   if (sections.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-10">
-      {sections.map(sec => (
-        <div id={sec.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")} key={sec.label} className="scroll-mt-[120px]">
-          <TierSubHeader label={sec.label} valueRange={sec.range} count={sec.processedUnits.length} />
-          {viewMode === "grid" ? <UnitGrid units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} />}
-        </div>
-      ))}
+      {sections.map(sec => {
+        const uniqueSecId = `${tier.toLowerCase()}-${sec.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+        return (
+          <div id={uniqueSecId} key={sec.label} className="scroll-mt-[120px]">
+            <TierSubHeader label={sec.label} valueRange={sec.range} count={sec.processedUnits.length} />
+            {viewMode === "grid" ? <UnitGrid units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} />}
+          </div>
+        );
+      })}
     </div>
   );
 }

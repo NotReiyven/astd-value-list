@@ -94,9 +94,6 @@ const buildLexicon = (ALL_UNITS: MasterUnit[]) => {
     cachedUnits = ALL_UNITS;
 };
 
-// ============================================================================
-// EXPOSED SLANG HANDLERS
-// ============================================================================
 export const learnSlang = (rawName: string, unitId: string) => {
     try {
         const cache = JSON.parse(localStorage.getItem("astd_slang_cache") || "{}");
@@ -120,9 +117,6 @@ export const getSlangCache = (): Record<string, string> => {
     catch { return {}; }
 };
 
-// ============================================================================
-// TYPES & EXPORTS
-// ============================================================================
 export type AmbiguousToken = { rawName: string; qty: number; col: "give" | "get"; options: MasterUnit[]; };
 export type ParseResult = { giveCards: TradeCard[]; getCards: TradeCard[]; ambiguous: AmbiguousToken[]; error: string | null; };
 
@@ -137,7 +131,9 @@ export const parseSmartTrade = (smartInput: string, ALL_UNITS: MasterUnit[]): Pa
         return { giveCards: [], getCards: [], ambiguous: [], error: "Input is empty." };
     }
 
-    if (cachedUnits !== ALL_UNITS || cachedUnits.length !== ALL_UNITS.length) {
+    // FIXED: Content-based fingerprint check to avoid thrashing when array references change
+    const needsRebuild = cachedUnits.length !== ALL_UNITS.length || (ALL_UNITS.length > 0 && cachedUnits[0]?.id !== ALL_UNITS[0]?.id);
+    if (needsRebuild) {
         buildLexicon(ALL_UNITS);
     }
 

@@ -1,5 +1,4 @@
-import { LazyRender } from "./LazyRender";
-import { useState, useRef, useDeferredValue, useMemo, memo } from "react";
+import { useState, useRef, useDeferredValue, useMemo, memo, useEffect } from "react";
 import { Search, X, LayoutGrid, List, ArrowUpDown, Filter, ArrowUp } from "lucide-react";
 import { PopupUnit, FilterKey, MasterUnit } from "../../../types";
 import { TIER_CONFIG, FILTERS, getTier } from "../../../data"; 
@@ -59,13 +58,13 @@ const SkeletonLoader = ({ viewMode }: { viewMode: "grid" | "list" }) => {
   );
 };
 
-// PERFORMANCE FIX: Wrapped MainCanvas in React.memo so the trade panel doesn't trigger 500+ component re-renders
 export const MainCanvas = memo(function MainCanvas({
-  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet,
+  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet, scrollToSection,
 }: {
   activeTierFilter: FilterKey; setActiveTierFilter: (f: FilterKey) => void;
   searchQuery: string; setSearchQuery: (s: string) => void;
   onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void;
+  scrollToSection?: { tier: string; sectionId: string } | null;
 }) {
   const { units: ALL_UNITS, isLoading } = useUnits(); 
   const tier = TIER_CONFIG[activeTierFilter] ?? TIER_CONFIG["S"];
@@ -83,6 +82,28 @@ export const MainCanvas = memo(function MainCanvas({
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  useEffect(() => {
+    if (!scrollToSection) return;
+    
+    setSearchQuery("");
+    setStatusFilter("all");
+    setActiveTierFilter("All");
+
+    const timer = setTimeout(() => {
+      const el = document.getElementById(scrollToSection.sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [scrollToSection]);
+
+  useEffect(() => {
+    if (scrollToSection) return;
+    scrollRef.current?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [deferredSearchQuery, statusFilter, sortMode, activeTierFilter, scrollToSection]);
 
   const dismissWelcome = () => {
     setShowWelcome(false);
@@ -123,7 +144,7 @@ export const MainCanvas = memo(function MainCanvas({
     const rawFiltered = ALL_UNITS.filter(u => {
       const q = deferredSearchQuery.toLowerCase();
       const matchesSearch = deferredSearchQuery === "" || (u.name?.toLowerCase() || "").includes(q) || (u.subtitle?.toLowerCase() || "").includes(q);
-      const matchesTier = activeTierFilter === "All" || getTier(u) === activeTierFilter;
+      const matchesTier = deferredSearchQuery !== "" || activeTierFilter === "All" || getTier(u) === activeTierFilter;
       return matchesSearch && matchesTier;
     });
     return processUnits(rawFiltered, sortMode, statusFilter);
@@ -245,18 +266,16 @@ export const MainCanvas = memo(function MainCanvas({
                       const tCfg = TIER_CONFIG[tKey];
                       return (
                         <div id={`${tKey.toLowerCase()}-tier`} key={tKey} className="flex flex-col w-full relative">
-                          <LazyRender placeholderHeight="600px">
-                            <div className={STICKY_HEADER_CLASS}>
-                              <TierBanner tier={tCfg} />
-                            </div>
-                            <div className="w-full">
-                              {viewMode === "grid" ? (
-                                <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                              ) : (
-                                <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                              )}
-                            </div>
-                          </LazyRender>
+                          <div className={STICKY_HEADER_CLASS}>
+                            <TierBanner tier={tCfg} />
+                          </div>
+                          <div className="w-full">
+                            {viewMode === "grid" ? (
+                              <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
+                            ) : (
+                              <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -272,20 +291,18 @@ export const MainCanvas = memo(function MainCanvas({
                   const tCfg = TIER_CONFIG[tKey];
                   return (
                     <div id={`${tKey.toLowerCase()}-tier`} key={tKey} className="flex flex-col w-full relative">
-                      <LazyRender placeholderHeight="800px">
-                        <div className={STICKY_HEADER_CLASS}>
-                          <TierBanner tier={tCfg} />
-                        </div>
-                        <div className="w-full">
-                          {isDefaultView ? (
-                            <DynamicTierSection units={rawUnitsInTier} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
-                          ) : viewMode === "grid" ? (
-                            <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                          ) : (
-                            <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                          )}
-                        </div>
-                      </LazyRender>
+                      <div className={STICKY_HEADER_CLASS}>
+                        <TierBanner tier={tCfg} />
+                      </div>
+                      <div className="w-full">
+                        {isDefaultView ? (
+                          <DynamicTierSection tier={tKey} units={rawUnitsInTier} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
+                        ) : viewMode === "grid" ? (
+                          <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
+                        ) : (
+                          <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -304,7 +321,7 @@ export const MainCanvas = memo(function MainCanvas({
               ) : (
                 <div className="w-full pr-4 md:pr-0">
                   {isDefaultView ? (
-                    <DynamicTierSection units={UNITS_BY_TIER[activeTierFilter] || []} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
+                    <DynamicTierSection tier={activeTierFilter} units={UNITS_BY_TIER[activeTierFilter] || []} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
                   ) : viewMode === "grid" ? (
                     <UnitGrid units={processUnits(UNITS_BY_TIER[activeTierFilter] || [], sortMode, statusFilter)} onAddGive={onAddGive} onAddGet={onAddGet} />
                   ) : (

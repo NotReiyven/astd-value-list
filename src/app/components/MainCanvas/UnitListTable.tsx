@@ -3,7 +3,7 @@ import { Plus, X, Image as ImageIcon, ArrowRight, ArrowLeft } from "lucide-react
 import { PopupUnit, MasterUnit } from "../../../types";
 import { GRID_STATUS_CFG, getTier, TIER_CONFIG, getProxyImage, getObtainability } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
-import { LazyRender } from "./LazyRender"; // IMPORT LAZYRENDER FOR CHUNKING
+import { LazyRender } from "./LazyRender";
 
 export const getStatColor = (label: string, value: number) => {
   if (label === "R") {
@@ -35,6 +35,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
   const [swipeOffset, setSwipeOffset] = useState(0);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const scrollDirectionRef = useRef<"horizontal" | "vertical" | null>(null);
   
   const popupUnit: PopupUnit = { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: typeof unit.value === "number" ? unit.value : 0, demand: unit.demand };
   const sCfg = unit.status ? GRID_STATUS_CFG[unit.status] : null;
@@ -65,15 +66,27 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
   const onTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    scrollDirectionRef.current = null;
   };
+
   const onTouchMove = (e: React.TouchEvent) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (Math.abs(dx) > Math.abs(dy) + 5) {
-       setSwipeOffset(dx);
+
+    if (!scrollDirectionRef.current) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        scrollDirectionRef.current = "horizontal";
+      } else {
+        scrollDirectionRef.current = "vertical";
+      }
+    }
+
+    if (scrollDirectionRef.current === "horizontal") {
+      setSwipeOffset(dx);
     }
   };
+
   const onTouchEnd = () => {
     if (swipeOffset > 80) {
       onAddGive(popupUnit); triggerAddedGlow();
@@ -83,6 +96,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
     setSwipeOffset(0);
     touchStartX.current = null;
     touchStartY.current = null;
+    scrollDirectionRef.current = null;
   };
 
   const valDisplay = unit.valueDisplay === "Owner's Choice" || unit.value === "owner" 
@@ -92,7 +106,6 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
       : <span className="text-[14px] md:text-[15px] font-bold tracking-tight text-[#F2F3F5] font-mono">{(unit.value as number).toLocaleString()}</span>;
 
   return (
-    // PERFORMANCE FIX: content-visibility completely isolates the row until user scrolls to it
     <div className="relative group w-full overflow-hidden" style={{ borderBottom: !isLast ? "1px solid rgba(255,255,255,0.04)" : "none", contentVisibility: "auto", containIntrinsicSize: "56px" }}>
       <div className={`absolute inset-0 flex items-center px-5 font-bold transition-colors duration-200 z-0 ${swipeOffset > 0 ? 'bg-[#FAA61A] justify-start text-white' : swipeOffset < 0 ? 'bg-[#5865F2] justify-end text-white' : 'bg-transparent'}`}>
          {swipeOffset > 0 && <><ArrowRight className="w-4 h-4 mr-2" /> Add Give</>}
@@ -196,7 +209,6 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
 });
 
 export const UnitListTable = memo(function UnitListTable({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
-  // PERFORMANCE FIX: Chunk massive unit arrays into chunks of 30 to recycle DOM nodes as user scrolls
   const chunks = useMemo(() => {
     const result = [];
     for (let i = 0; i < units.length; i += 30) {

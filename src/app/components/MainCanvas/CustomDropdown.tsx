@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { Check } from "lucide-react";
 
-// Updated this line to use a generic <T> that extends HTMLElement
 export function useClickOutside<T extends HTMLElement>(ref: React.RefObject<T | null>, handler: () => void) {
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
   useEffect(() => {
     const listener = (event: MouseEvent | TouchEvent) => {
       if (!ref.current || ref.current.contains(event.target as Node)) return;
-      handler();
+      handlerRef.current();
     };
     document.addEventListener("mousedown", listener);
     document.addEventListener("touchstart", listener);
@@ -14,7 +18,7 @@ export function useClickOutside<T extends HTMLElement>(ref: React.RefObject<T | 
       document.removeEventListener("mousedown", listener);
       document.removeEventListener("touchstart", listener);
     };
-  }, [ref, handler]);
+  }, [ref]);
 }
 
 export function CustomDropdown({ icon: Icon, value, options, onChange, defaultLabel }: any) {
