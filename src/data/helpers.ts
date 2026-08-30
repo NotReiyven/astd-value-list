@@ -18,9 +18,38 @@ export function getRarityLabel(v: number) {
 
 export function getProxyImage(url?: string) {
   if (!url || url === "PLACEHOLDER_URL") return null;
-  const cleanUrl = url.split('/revision/')[0];
-  return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp&w=150`;
+
+  // Imgur blocks most proxies – serve directly
+  if (url.includes("imgur.com")) return url;
+
+  const cleanUrl = url.split("/revision/")[0];
+  return `https://wsrv.nl/?url=${encodeURIComponent(cleanUrl)}&output=webp&w=150&fit=cover`;
 }
+
+// PERFORMANCE FIX: Hoisted outside the function so it's only created in memory once,
+// not 300+ times every render cycle.
+const UNOB_BLACKLIST = [
+  "water-goddess", "aqua",
+  "kageni", "cid",
+  "challenger-flaming-tiger", "rengoku",
+  "tuca-donka", "hakari", "kinji",
+  "sound-o-sonic-demon", "tengen",
+  "mercury-guardian", "sailor mercury",
+  "garnet-spear", "violet", "evergarden",
+  "veldora", "storm dragon",
+  "gremmy", "visionary",
+  "thragg", "freddie mercury",
+  "water-boy", "suigetsu",
+  "excellent-leader", "frost",
+  "red-head", "shanks",
+  "water-kakazu", "wind-kakazu", "fire-kakazu", "lightning-kakazu", "kakuzu",
+  "second-hand", "doppio",
+  "water-mage-c", "juvia",
+  "smoker", "asuma",
+  "afro-samurai",
+  "guardian-of-aba", "pui pui",
+  "zaruto-grr-iii", "grr iii"
+];
 
 export function getObtainability(unit?: MasterUnit): "OBT" | "UNOB" {
   if (!unit) return "UNOB";
@@ -42,31 +71,8 @@ export function getObtainability(unit?: MasterUnit): "OBT" | "UNOB" {
     return "UNOB";
   }
 
-  // 3. Explicit Unobtainable Blacklist requested by you
-  const unobList = [
-    "water-goddess", "aqua",
-    "kageni", "cid",
-    "challenger-flaming-tiger", "rengoku",
-    "tuca-donka", "hakari", "kinji",
-    "sound-o-sonic-demon", "tengen",
-    "mercury-guardian", "sailor mercury",
-    "garnet-spear", "violet", "evergarden",
-    "veldora", "storm dragon",
-    "gremmy", "visionary",
-    "thragg", "freddie mercury",
-    "water-boy", "suigetsu",
-    "excellent-leader", "frost",
-    "red-head", "shanks",
-    "water-kakazu", "wind-kakazu", "fire-kakazu", "lightning-kakazu", "kakuzu",
-    "second-hand", "doppio",
-    "water-mage-c", "juvia",
-    "smoker", "asuma",
-    "afro-samurai",
-    "guardian-of-aba", "pui pui",
-    "zaruto-grr-iii", "grr iii"
-  ];
-
-  if (unobList.some(item => id.includes(item) || name.includes(item) || subtitle.includes(item))) {
+  // 3. Explicit Unobtainable Blacklist
+  if (UNOB_BLACKLIST.some(item => id.includes(item) || name.includes(item) || subtitle.includes(item))) {
     return "UNOB";
   }
 

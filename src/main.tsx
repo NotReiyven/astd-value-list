@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client'
 import App from "./app/App.tsx";
 import './styles/index.css'
 import { UnitProvider } from './context/UnitContext'
-import { TradeProvider } from './context/TradeContext'
 
 // --- NEW: Global Error Boundary ---
 interface ErrorBoundaryProps {
@@ -33,8 +32,6 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     if (window.confirm("This will clear all your saved trade data and reload the app. Are you sure you want to proceed?")) {
       localStorage.removeItem("astd_give");
       localStorage.removeItem("astd_get");
-      localStorage.removeItem("astd_trade_give");
-      localStorage.removeItem("astd_trade_get");
       window.location.reload();
     }
   }
@@ -78,9 +75,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <UnitProvider>
-        <TradeProvider>
-          <App />
-        </TradeProvider>
+        <App />
       </UnitProvider>
     </ErrorBoundary>
   </React.StrictMode>,
