@@ -1,19 +1,53 @@
 import { useMemo } from "react";
-import { PopupUnit, MasterUnit } from "../../../types";
-import { sortVal } from "../../../data";
+import { MasterUnit, PopupUnit } from "../../../types";
 import { UnitGrid } from "./UnitGrid";
 import { UnitListTable } from "./UnitListTable";
+
+// DYNAMIC MASK: Safely catch text-based O/C inputs without breaking legitimate 0 or 1 values
+export function getSortValue(u: MasterUnit): number {
+  const disp = u.valueDisplay?.toLowerCase() || "";
+  if (u.value === "owner" || disp.includes("owner's choice") || disp.includes("o/c")) {
+    return Infinity;
+  }
+  if (u.value === "range" && typeof u.valueMin === "number") {
+    return u.valueMin;
+  }
+  return typeof u.value === "number" ? u.value : 0;
+}
 
 export function processUnits(units: MasterUnit[], sortMode: string, statusFilter: string) {
   let processed = [...units];
   if (statusFilter !== "all") processed = processed.filter(u => u.status === statusFilter);
   
   processed.sort((a, b) => {
-    if (sortMode === "value-desc") return sortVal(b) - sortVal(a);
-    if (sortMode === "value-asc") return sortVal(a) - sortVal(b);
-    if (sortMode === "demand-desc") return (b.demand !== a.demand) ? b.demand - a.demand : sortVal(b) - sortVal(a); 
-    if (sortMode === "supply-asc") return (a.supply !== b.supply) ? a.supply - b.supply : sortVal(b) - sortVal(a); 
-    if (sortMode === "rarity-desc") return (b.rarity !== a.rarity) ? b.rarity - a.rarity : sortVal(b) - sortVal(a);
+    const valA = getSortValue(a);
+    const valB = getSortValue(b);
+
+    // FIXED: Infinity - Infinity returns NaN, which breaks JavaScript sorting arrays.
+    // We explicitly catch infinite ties and alphabetize them safely.
+    if (sortMode === "value-desc") {
+      if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
+      return valB - valA;
+    }
+    if (sortMode === "value-asc") {
+      if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
+      return valA - valB;
+    }
+    if (sortMode === "demand-desc") {
+      if (b.demand !== a.demand) return b.demand - a.demand;
+      if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
+      return valB - valA;
+    }
+    if (sortMode === "supply-asc") {
+      if (a.supply !== b.supply) return a.supply - b.supply;
+      if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
+      return valB - valA;
+    }
+    if (sortMode === "rarity-desc") {
+      if (b.rarity !== a.rarity) return b.rarity - a.rarity;
+      if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
+      return valB - valA;
+    }
     if (sortMode === "alpha-asc") return a.name.localeCompare(b.name);
     return 0;
   });
@@ -28,7 +62,7 @@ export function TierBanner({ tier }: { tier: { label: string; badgeColor: string
       <div className="relative z-10 flex min-h-[88px] items-center justify-center px-6">
         <div className="flex flex-col items-center">
           <span className="mb-2 text-[10px] font-bold uppercase tracking-[0.35em] opacity-60" style={{ color: tier.badgeColor }}>Tier</span>
-          <h1 className="text-[28px] font-black uppercase tracking-[0.18em] leading-none" style={{ color: tier.badgeColor, textShadow: `0 2px 8px rgba(0,0,0,0.45), 0 0 18px ${tier.badgeColor}35` }}>{tier.label}</h1>
+          <h1 className="text-[28px] font-black uppercase tracking-[0.18em] leading-none text-center" style={{ color: tier.badgeColor, textShadow: `0 2px 8px rgba(0,0,0,0.45), 0 0 18px ${tier.badgeColor}35` }}>{tier.label}</h1>
         </div>
       </div>
     </div>
@@ -53,10 +87,32 @@ export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilt
   
   const sections = useMemo(() => {
     const sectionsMap = new Map<string, { label: string; range: string; units: MasterUnit[] }>();
+    const isStandardTier = ["S", "A", "B", "C"].includes(tier);
     
+    // Auto-detect the "Top" category for this specific tier so we can hoist misplaced O/C units into it
+    let topCatLabel = "";
+    let topCatRange = "";
+    if (isStandardTier) {
+      units.forEach((u: MasterUnit) => {
+        if (u.subCategory?.toLowerCase().includes("top")) {
+          topCatLabel = u.subCategory;
+          topCatRange = u.subCategoryRange || "N/A";
+        }
+      });
+    }
+
     units.forEach((u: MasterUnit) => {
-      const cat = u.subCategory || "Uncategorized";
-      if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range: u.subCategoryRange || "N/A", units: [] });
+      let cat = u.subCategory || "Uncategorized";
+      let range = u.subCategoryRange || "N/A";
+
+      // DATA CORRECTION: If a unit is O/C but the spreadsheet trapped it in a low tier,
+      // dynamically intercept it and assign it to the Top tier section so it joins the others.
+      if (isValueSort && isStandardTier && getSortValue(u) === Infinity && topCatLabel) {
+        cat = topCatLabel;
+        range = topCatRange;
+      }
+      
+      if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range, units: [] });
       sectionsMap.get(cat)!.units.push(u);
     });
 
@@ -64,12 +120,34 @@ export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilt
       ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
     })).filter(sec => sec.processedUnits.length > 0);
 
-    const isStandardTier = ["S", "A", "B", "C"].includes(tier);
-
     if (isValueSort && isStandardTier) {
+      const subCatPriority: Record<string, number> = {
+        "top": 1,
+        "high": 2,
+        "mid": 3,
+        "low": 4
+      };
+
       mappedSections.sort((a, b) => {
-        const valA = Math.max(...a.processedUnits.map(u => sortVal(u)));
-        const valB = Math.max(...b.processedUnits.map(u => sortVal(u)));
+        const getRank = (name: string) => {
+          const lower = name.toLowerCase();
+          for (const key of Object.keys(subCatPriority)) {
+            if (lower.includes(key)) return subCatPriority[key];
+          }
+          return 99;
+        };
+
+        const rankA = getRank(a.label);
+        const rankB = getRank(b.label);
+
+        // Sort structurally based on the section names to prevent chaotic shifting
+        if (rankA !== rankB) {
+          return sortMode === "value-desc" ? rankA - rankB : rankB - rankA;
+        }
+
+        // Fallback: order by the highest numeric value (excluding Infinity) if ranks match
+        const valA = Math.max(...a.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
+        const valB = Math.max(...b.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
         return sortMode === "value-desc" ? valB - valA : valA - valB;
       });
     }

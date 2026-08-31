@@ -99,8 +99,9 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
     scrollDirectionRef.current = null;
   };
 
-  const valDisplay = unit.valueDisplay === "Owner's Choice" || unit.value === "owner" 
-    ? <span className="text-[13px] md:text-[14px] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">O/C</span>
+  // FIXED: Standardized Owner's Choice display rule
+  const valDisplay = unit.value === "owner" || unit.valueDisplay === "Owner's Choice" || unit.valueDisplay === "O/C"
+    ? <span className="text-[13px] md:text-[14px] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Owner's Choice</span>
     : unit.valueDisplay 
       ? <span className="text-[13px] md:text-[14px] font-bold tracking-tight text-[#DBDEE1] font-mono">{unit.valueDisplay}</span>
       : <span className="text-[14px] md:text-[15px] font-bold tracking-tight text-[#F2F3F5] font-mono">{(unit.value as number).toLocaleString()}</span>;

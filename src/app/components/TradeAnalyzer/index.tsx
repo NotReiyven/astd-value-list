@@ -18,6 +18,7 @@ export function TradeAnalyzerPanel({
   onOverwrite,
   isOpen = true,
   onClose,
+  guideState
 }: {
   giveItems: TradeCard[];
   getItems: TradeCard[];
@@ -29,6 +30,7 @@ export function TradeAnalyzerPanel({
   onOverwrite: (giveCards: TradeCard[], getCards: TradeCard[]) => void;
   isOpen?: boolean;
   onClose?: () => void;
+  guideState?: { type: string | null; step: number };
 }) {
   const { units: ALL_UNITS } = useUnits();
   const [copied, setCopied] = useState(false);
@@ -160,7 +162,6 @@ export function TradeAnalyzerPanel({
     document.addEventListener("mouseup", onMouseUp);
   }, [panelWidth]);
 
-  // FIXED: Cleanup document listeners on unmount to prevent leaks if component unmounts mid-drag
   useEffect(() => {
     return () => {
       document.body.style.cursor = 'default';
@@ -271,7 +272,9 @@ export function TradeAnalyzerPanel({
     const rShift = `${avgStat(giveItems, "rarity", ALL_UNITS)} ➔ ${avgStat(getItems, "rarity", ALL_UNITS)}`;
     const sShift = `${avgStat(giveItems, "supply", ALL_UNITS)} ➔ ${avgStat(getItems, "supply", ALL_UNITS)}`;
     const dShift = `${avgStat(giveItems, "demand", ALL_UNITS)} ➔ ${avgStat(getItems, "demand", ALL_UNITS)}`;
-    const text = `**[I GIVE]**\n> ${giveParts || "Nothing"}\n\n**[I GET]**\n> ${getParts || "Nothing"}\n\n📊 **Diff:** ${generateTextSummary(giveItems, getItems, giveTotal, getTotal, ALL_UNITS)}\n📈 **Rarity, Supply, Demand shift:**\n> R: ${rShift} | S: ${sShift} | D: ${dShift}\n\n`;
+    
+    // FIXED: Passed getItems as the second argument instead of repeating giveItems
+    const text = `**[I GIVE]**\n> ${giveParts || "Nothing"}\n\n**[I GET]**\n> ${getParts || "Nothing"}\n\n**Diff:** ${generateTextSummary(giveItems, getItems, giveTotal, getTotal, ALL_UNITS)}\n**Rarity, Supply, Demand shift:**\n> R: ${rShift} | S: ${sShift} | D: ${dShift}\n\nw/l`;
 
     const tryWrite = async () => {
       try {
@@ -288,6 +291,8 @@ export function TradeAnalyzerPanel({
     };
     tryWrite();
   }, [giveItems, getItems, giveTotal, getTotal, ALL_UNITS]);
+
+  const isMainStep4 = guideState?.type === "main" && guideState?.step === 4;
 
   return (
     <div 
@@ -388,7 +393,6 @@ export function TradeAnalyzerPanel({
 
                   <div className="flex flex-col gap-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-1 pb-1">
                     {ambiguousItems.map((item, idx) => (
-                      // FIXED: Unique compound key instead of array index to prevent React DOM reuse bugs
                       <div key={`${idx}-${item.rawName}`} className="flex flex-col p-3 bg-[#1E1F22] rounded-[8px] border border-[rgba(255,255,255,0.02)] shadow-inner">
                         <div className="flex items-center justify-between mb-3">
                             <p className="text-[13px] text-[#B5BAC1] font-medium">
@@ -476,16 +480,17 @@ export function TradeAnalyzerPanel({
         </div>
       )}
 
-      <div className="flex-shrink-0 mx-3 md:mx-4 mt-4 rounded-[8px] px-4 py-3 md:px-5 md:py-4 relative overflow-hidden bg-[#1E1F22] border border-[rgba(255,255,255,0.04)]">
+      {/* HIGHLIGHTED TARGET: During step 4, the summary box pulses to draw the user's eye */}
+      <div className={`flex-shrink-0 mx-3 md:mx-4 mt-4 rounded-[8px] px-4 py-3 md:px-5 md:py-4 relative overflow-hidden bg-[#1E1F22] border transition-all duration-300 ${isMainStep4 ? 'border-[#5865F2] shadow-[0_0_20px_rgba(88,101,242,0.4)] ring-4 ring-[#5865F2]/30' : 'border-[rgba(255,255,255,0.04)]'}`}>
         <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div>
+          <div className="flex items-center justify-between mb-2 gap-4">
+            <div className="min-w-0 flex-1">
               <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-[#949BA4] mb-1">Total Give</p>
-              <p className="text-[16px] md:text-[18px] font-bold text-[#F2F3F5] font-mono transition-all duration-300">{giveTotal.toLocaleString()}</p>
+              <p className="text-[16px] md:text-[18px] font-bold text-[#F2F3F5] font-mono transition-all duration-300 truncate" title={giveTotal.toLocaleString()}>{giveTotal.toLocaleString()}</p>
             </div>
-            <div className="text-right">
+            <div className="min-w-0 flex-1 text-right">
               <p className="text-[9px] md:text-[10px] font-bold uppercase tracking-widest text-[#949BA4] mb-1">Total Get</p>
-              <p className="text-[16px] md:text-[18px] font-bold text-[#F2F3F5] font-mono transition-all duration-300">{getTotal.toLocaleString()}</p>
+              <p className="text-[16px] md:text-[18px] font-bold text-[#F2F3F5] font-mono transition-all duration-300 truncate" title={getTotal.toLocaleString()}>{getTotal.toLocaleString()}</p>
             </div>
           </div>
           <div className="flex w-full h-[6px] gap-1 mb-2">
@@ -493,9 +498,9 @@ export function TradeAnalyzerPanel({
             {getTotal > 0 && <div className="rounded-full bg-[#DBDEE1]" style={{ width: `${getPercent}%`, transition: "width 0.8s cubic-bezier(0.16, 1, 0.3, 1)" }} />}
             {giveTotal === 0 && getTotal === 0 && <div className="w-full h-full rounded-full bg-[#111214] transition-all duration-500" />}
           </div>
-          <p className="text-[10px] md:text-[11.5px] font-medium text-[#B5BAC1] text-center mt-3 tracking-wide px-1">
+          <div className="text-[10px] md:text-[11.5px] font-medium text-[#B5BAC1] text-center mt-3 tracking-wide px-1">
             <DynamicSummary giveItems={giveItems} getItems={getItems} giveTotal={giveTotal} getTotal={getTotal} ALL_UNITS={ALL_UNITS} />
-          </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 gap-1.5 md:gap-2">

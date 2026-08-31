@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense, lazy, useRef, useCallback } from "react";
-import { PanelLeft, Calculator, Hash, Search, X, Check } from "lucide-react";
+import { PanelLeft, Calculator, Hash, Search, X, Check, GraduationCap, Map, User, Settings2 } from "lucide-react";
 import { FilterKey, PopupUnit, TradeCard } from "../types";
 
 const TradeAnalyzerPanel = lazy(() => import("./components/TradeAnalyzer").then(module => ({ default: module.TradeAnalyzerPanel })));
@@ -8,7 +8,6 @@ const MainCanvas = lazy(() => import("./components/MainCanvas").then(module => (
 const HomeChannel = lazy(() => import("./components/HomeChannel").then(module => ({ default: module.HomeChannel })));
 const TutorialChannel = lazy(() => import("./components/TutorialChannel").then(module => ({ default: module.TutorialChannel })));
 const ExtraNoticesChannel = lazy(() => import("./components/ExtraNoticesChannel").then(module => ({ default: module.ExtraNoticesChannel })));
-const WelcomeModal = lazy(() => import("./components/WelcomeModal").then(module => ({ default: module.WelcomeModal })));
 
 function useStickyState<T>(
   defaultValue: T,
@@ -21,11 +20,8 @@ function useStickyState<T>(
       if (stickyValue !== null) {
         const parsed = JSON.parse(stickyValue);
         if (isValid(parsed)) return parsed;
-        console.warn(`Ignoring malformed localStorage value for "${key}"`, parsed);
       }
-    } catch (err) {
-      console.warn(`Error reading localStorage key "${key}":`, err);
-    }
+    } catch (err) {}
     return defaultValue;
   });
 
@@ -38,13 +34,7 @@ function useStickyState<T>(
 
 const isTradeCardArray = (value: unknown): value is TradeCard[] =>
   Array.isArray(value) &&
-  value.every(
-    (item) =>
-      item &&
-      typeof item === "object" &&
-      typeof (item as any).id === "string" &&
-      typeof (item as any).qty === "number"
-  );
+  value.every(item => item && typeof item === "object" && typeof (item as any).id === "string" && typeof (item as any).qty === "number");
 
 const isBoolean = (value: unknown): value is boolean => typeof value === "boolean";
 const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
@@ -56,24 +46,175 @@ const CHANNEL_INFO: Record<string, { title: string; subtitle: string }> = {
   "extra-notices": { title: "extra-notices", subtitle: "Additional rules, exceptions, and community notes." }
 };
 
+type GuideType = "main" | "channels" | "advanced" | "developer" | null;
+
+const AQUA_DIALOGUES: Record<string, string[]> = {
+  main: [
+    "",
+    "Listen up, you shut-in NEET! I, the beautiful and wise Goddess Aqua, have descended to save you from getting completely scammed! You'd be helpless without me. First, click the **Value List** channel in the sidebar so we can begin!",
+    "Hmph, even someone with your pitiful intelligence stat can do this part. Let's build a mock trade. If you're on a PC, **Left-click** a unit for your *Give* side, or **Right-click** for your *Get* side! On mobile? Just **tap** or **swipe** the card! Don't mess this up!",
+    "W-Wait! Don't just accept a trade blindly! Are you trying to lose all your value?! Use the divine tool I've graciously bestowed upon you! Click that glowing **Calculator** button right now to open the Analyzer!",
+    "See?! It instantly breaks down the value differences and market momentum for you! I just saved you from financial ruin, so you should be on your knees thanking me! Now get out there and trade, and don't forget to praise your Goddess!"
+  ],
+  channels: [
+    "",
+    "Lost, are we? Typical. Pay attention to the sidebar on the left! **Home** has patch notes, and **Extra Notices** has crucial market rules you probably ignored! Don't just stare at the Value List all day!"
+  ],
+  advanced: [
+    "",
+    "Too lazy to type? Click the **Wand** in the calculator to paste whole paragraphs and let my divine magic sort the units! Also, keep an eye on the **Trade Notices** below the calculator—they'll tell you if a unit is Inflated or dropping!"
+  ],
+  developer: [
+    "",
+    "Oh, you want to know who built this shrine to my greatness? It was my loyal head developer, Reiyven! He spent way too much time coding this instead of going outside. Be sure to appreciate his hard work!"
+  ]
+};
+
+// --- OPTIMIZATION 3: STATE ISOLATED AQUA TYPEWRITER COMPONENT ---
+// This completely shields the main App and heavy canvas/analyzer components 
+// from running 40 re-renders a second during the 25ms typewriter interval.
+function AquaGuideOverlay({ 
+  guideState, 
+  onEndGuide 
+}: { 
+  guideState: { type: GuideType; step: number }; 
+  onEndGuide: () => void 
+}) {
+  const [displayedText, setDisplayedText] = useState("");
+  const [isTyping, setIsTyping] = useState(false);
+
+  useEffect(() => {
+    if (!guideState.type || guideState.step === 0) return;
+    setDisplayedText("");
+    setIsTyping(true);
+    let i = 0;
+    const fullText = AQUA_DIALOGUES[guideState.type]?.[guideState.step] || "";
+    const interval = setInterval(() => {
+      setDisplayedText(fullText.substring(0, i + 1));
+      i++;
+      if (i >= fullText.length) {
+        clearInterval(interval);
+        setIsTyping(false);
+      }
+    }, 25);
+    return () => clearInterval(interval);
+  }, [guideState]);
+
+  const handleSkipTyping = () => {
+    if (isTyping && guideState.type && guideState.step > 0) {
+      setDisplayedText(AQUA_DIALOGUES[guideState.type]?.[guideState.step] || "");
+      setIsTyping(false);
+    }
+  };
+
+  const renderDialogue = (text: string) => {
+    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={idx} className="text-white font-black drop-shadow-[0_0_8px_rgba(255,255,255,0.4)] tracking-wide">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith('*') && part.endsWith('*')) {
+        return <em key={idx} className="text-[#00A8FC] font-bold not-italic">{part.slice(1, -1)}</em>;
+      }
+      return <span key={idx}>{part}</span>;
+    });
+  };
+
+  if (!guideState.type) return null;
+
+  const isMainStep4 = guideState.type === "main" && guideState.step === 4;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[99998] bg-black/75 transition-opacity backdrop-blur-sm pointer-events-auto" onClick={handleSkipTyping} />
+      <div className="fixed inset-0 z-[100005] pointer-events-none flex items-end justify-center pb-6 md:pb-12 px-4">
+        <div className="relative w-full max-w-[800px] flex items-end drop-shadow-2xl animate-slide-up pointer-events-auto" onClick={handleSkipTyping}>
+           <div className="hidden md:block w-[180px] shrink-0 relative z-20 pointer-events-none">
+              <img 
+                 src="https://static.wikia.nocookie.net/allstartd/images/c/c7/Water_Goddess.png" 
+                 className="absolute bottom-[-10px] right-[-20px] w-[260px] max-w-none drop-shadow-[0_0_20px_rgba(0,0,0,0.5)] object-contain"
+                 alt="Aqua"
+              />
+           </div>
+           <div className="bg-[#111214]/95 backdrop-blur-xl border-2 border-[#5865F2] p-5 md:p-6 rounded-[12px] flex-1 relative z-10 shadow-[0_0_40px_rgba(88,101,242,0.25)] min-h-[140px] flex flex-col cursor-pointer transition-all hover:bg-[#111214]">
+             <div className="flex items-center gap-3 mb-3 md:mb-4 border-b border-[rgba(255,255,255,0.06)] pb-3">
+               <img 
+                 src="https://static.wikia.nocookie.net/allstartd/images/c/c7/Water_Goddess.png" 
+                 className="md:hidden w-10 h-10 rounded-full border border-[#5865F2] object-cover bg-[#2B2D31] shadow-md"
+                 alt="Aqua"
+               />
+               <span className="text-[#5865F2] font-black text-[16px] md:text-[18px] uppercase tracking-wider drop-shadow-md">Goddess Aqua</span>
+             </div>
+             <p className="text-[#B5BAC1] text-[14px] md:text-[16px] leading-relaxed font-medium min-h-[60px]">
+               {renderDialogue(displayedText)}
+               {isTyping && <span className="animate-pulse text-[#5865F2] font-black">|</span>}
+             </p>
+             {(!isTyping && (isMainStep4 || guideState.type !== "main")) && (
+               <button onClick={(e) => { e.stopPropagation(); onEndGuide(); }} className="mt-5 self-start bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold py-2.5 px-6 rounded-[6px] transition-all active:scale-95 shadow-md border border-[rgba(255,255,255,0.1)]">
+                 Praise Aqua! (Finish)
+               </button>
+             )}
+             <button onClick={(e) => { e.stopPropagation(); onEndGuide(); }} className="absolute bottom-3 right-4 text-[#80848E] hover:text-[#DBDEE1] text-[10px] md:text-[11px] font-bold uppercase tracking-wider transition-colors z-30 bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">
+               Skip
+             </button>
+           </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export default function App() {
   const [isBooting, setIsBooting] = useState(true);
+
+  const [guideState, setGuideState] = useState<{ type: GuideType; step: number }>({ type: null, step: 0 });
+  const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
   const [globalYouGive, setGlobalYouGive] = useStickyState<TradeCard[]>([], "astd_give", isTradeCardArray);
   const [globalYouGet,  setGlobalYouGet]  = useStickyState<TradeCard[]>([], "astd_get", isTradeCardArray);
   const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel", isNonEmptyString);
   const [activeTierFilter, setActiveTierFilter] = useStickyState<FilterKey>("S", "astd_tier");
 
-  // FIXED: State to hold target scroll instructions for MainCanvas
   const [scrollToSection, setScrollToSection] = useState<{ tier: string; sectionId: string } | null>(null);
-
   const [isRosterOpen, setIsRosterOpen] = useStickyState(window.innerWidth >= 768, "astd_roster", isBoolean);
   const [isAnalyzerOpen, setIsAnalyzerOpen] = useStickyState(false, "astd_analyzer", isBoolean);
   const [globalSearchQuery, setGlobalSearchQuery] = useState("");
 
   const touchStartPos = useRef<{x: number, y: number} | null>(null);
-  
   const [toast, setToast] = useState<{ id: number; unitName: string; type: "give" | "get" } | null>(null);
+  const activeItemsCount = globalYouGive.reduce((acc, c) => acc + c.qty, 0) + globalYouGet.reduce((acc, c) => acc + c.qty, 0);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localStorage.getItem("astd_tutorial_done") !== "true") {
+        setGuideState({ type: "main", step: 1 });
+        if (window.innerWidth < 768) setIsRosterOpen(true);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [setIsRosterOpen]);
+
+  const startGuide = useCallback((type: GuideType) => {
+    setHelpMenuOpen(false);
+    setGuideState({ type, step: 1 });
+    
+    if (type === "developer") {
+      setActiveChannel("home");
+    } else if (type === "advanced") {
+      setIsAnalyzerOpen(true);
+    } else if (type === "channels") {
+      if (window.innerWidth < 768) setIsRosterOpen(true);
+    } else if (type === "main") {
+      if (window.innerWidth < 768) setIsRosterOpen(true);
+    }
+  }, [setActiveChannel, setIsAnalyzerOpen, setIsRosterOpen]);
+
+  const endGuide = useCallback(() => {
+    if (guideState.type === "main") {
+      localStorage.setItem("astd_tutorial_done", "true");
+    }
+    setGuideState({ type: null, step: 0 });
+  }, [guideState.type]);
 
   useEffect(() => {
     if (!toast) return;
@@ -95,8 +236,7 @@ export default function App() {
       import("./components/MainCanvas"),
       import("./components/HomeChannel"),
       import("./components/TutorialChannel"),
-      import("./components/ExtraNoticesChannel"),
-      import("./components/WelcomeModal")
+      import("./components/ExtraNoticesChannel")
     ]).then(() => {
       setTimeout(() => setIsBooting(false), 1500);
     }).catch(() => setIsBooting(false));
@@ -111,31 +251,32 @@ export default function App() {
     const dx = e.changedTouches[0].clientX - touchStartPos.current.x;
     const dy = e.changedTouches[0].clientY - touchStartPos.current.y;
 
-    if (Math.abs(dy) > 40) {
-      touchStartPos.current = null;
-      return;
-    }
+    if (Math.abs(dy) > 40) return;
 
     if (dx > 60) {
       if (isAnalyzerOpen) setIsAnalyzerOpen(false);
       else if (!isRosterOpen && window.innerWidth < 768) setIsRosterOpen(true);
     } else if (dx < -60) {
       if (isRosterOpen) setIsRosterOpen(false);
-      else if (!isAnalyzerOpen && window.innerWidth < 768) setIsAnalyzerOpen(true);
+      else if (!isAnalyzerOpen && window.innerWidth < 768) setIsRosterOpen(true);
     }
     touchStartPos.current = null;
   }, [isAnalyzerOpen, isRosterOpen, setIsAnalyzerOpen, setIsRosterOpen]);
 
-  // FIXED: Simplified thread handler that sets channel, updates the filter tab precisely, and queues scroll target
+  const handleChannelChange = useCallback((id: string) => {
+    setActiveChannel(id);
+    if (id === "value-list" && guideState.type === "main" && guideState.step === 1) {
+      setGuideState(prev => ({ ...prev, step: 2 }));
+      if (window.innerWidth < 768) setIsRosterOpen(false);
+    }
+  }, [setActiveChannel, guideState, setIsRosterOpen]);
+
   const handleThreadClick = useCallback((tier: FilterKey, sectionId: string) => {
     setActiveChannel("value-list");
-    setActiveTierFilter(tier); // Sets the exact tab filter (e.g., "A", "Pure", etc.)
+    setActiveTierFilter(tier); 
     setGlobalSearchQuery(""); 
     if (window.innerWidth < 768) setIsRosterOpen(false);
-
     setScrollToSection({ tier, sectionId });
-
-    // Clean up instruction after execution window
     setTimeout(() => {
       setScrollToSection(null);
     }, 400);
@@ -148,7 +289,8 @@ export default function App() {
       return [...prev, { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: unit.value, demand: unit.demand, qty: 1 }];
     });
     setToast({ id: Date.now(), unitName: unit.name, type: "give" });
-  }, [setGlobalYouGive]);
+    if (guideState.type === "main" && guideState.step === 2) setGuideState(prev => ({ ...prev, step: 3 }));
+  }, [setGlobalYouGive, guideState]);
 
   const handleAddGet = useCallback((unit: PopupUnit) => {
     setGlobalYouGet((prev) => {
@@ -157,7 +299,8 @@ export default function App() {
       return [...prev, { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: unit.value, demand: unit.demand, qty: 1 }];
     });
     setToast({ id: Date.now(), unitName: unit.name, type: "get" });
-  }, [setGlobalYouGet]);
+    if (guideState.type === "main" && guideState.step === 2) setGuideState(prev => ({ ...prev, step: 3 }));
+  }, [setGlobalYouGet, guideState]);
 
   const handleChangeQty = useCallback((col: "give" | "get", id: string, qty: number) => {
     const setter = col === "give" ? setGlobalYouGive : setGlobalYouGet;
@@ -193,6 +336,11 @@ export default function App() {
     setGlobalYouGet([...globalYouGive]);
   }, [globalYouGet, globalYouGive, setGlobalYouGive, setGlobalYouGet]);
 
+  const handleToggleAnalyzer = useCallback(() => {
+    setIsAnalyzerOpen(prev => !prev);
+    if (guideState.type === "main" && guideState.step === 3) setGuideState(prev => ({ ...prev, step: 4 }));
+  }, [setIsAnalyzerOpen, guideState]);
+
   const currentChannelInfo = CHANNEL_INFO[activeChannel] || { title: activeChannel, subtitle: "" };
 
   if (isBooting) {
@@ -217,6 +365,18 @@ export default function App() {
     );
   }
 
+  // --- OPTIMIZATION 4: DYNAMIC COMPOSITING & PAINT LAYER Z-INDEX MANAGEMENT ---
+  // Heavy z-indices are only injected into active states to avoid bloating browser paint layers.
+  const isMainStep1 = guideState.type === "main" && guideState.step === 1;
+  const isMainStep2 = guideState.type === "main" && guideState.step === 2;
+  const isMainStep3 = guideState.type === "main" && guideState.step === 3;
+  const isMainStep4 = guideState.type === "main" && guideState.step === 4;
+
+  const sidebarZ = isMainStep1 || guideState.type === "channels" ? "!z-[100000] shadow-[15px_0_50px_rgba(0,0,0,0.8)]" : "z-50";
+  const mainContentZ = isMainStep2 || guideState.type === "developer" ? "!z-[100000] relative shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "";
+  const calcHeaderZ = helpMenuOpen || isMainStep3 ? "!z-[99999] shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "z-30";
+  const analyzerZ = isMainStep4 || guideState.type === "advanced" ? "!z-[100000] shadow-[-20px_0_50px_rgba(0,0,0,0.8)]" : "z-50";
+
   return (
     <div 
       className="flex h-screen overflow-hidden relative" 
@@ -224,15 +384,32 @@ export default function App() {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
+      <style>{`
+        @keyframes sonar {
+          0% { box-shadow: 0 0 0 0 rgba(88, 101, 242, 0.7); }
+          70% { box-shadow: 0 0 0 15px rgba(88, 101, 242, 0); }
+          100% { box-shadow: 0 0 0 0 rgba(88, 101, 242, 0); }
+        }
+        .animate-sonar { animation: sonar 1.5s infinite; }
+        
+        @keyframes wiggle {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-6deg) scale(1.05); }
+          50% { transform: rotate(6deg) scale(1.05); }
+          75% { transform: rotate(-6deg) scale(1.05); }
+        }
+        .animate-wiggle { animation: wiggle 0.4s ease-in-out infinite; }
+      `}</style>
       <Suspense fallback={null}>
         
-        <WelcomeModal />
+        {/* Isolated Aqua Overlay Component */}
+        <AquaGuideOverlay guideState={guideState} onEndGuide={endGuide} />
 
         {isRosterOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setIsRosterOpen(false)} />}
         {isAnalyzerOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setIsAnalyzerOpen(false)} />}
 
         <div 
-          className={`fixed bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          className={`fixed bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] ${guideState.type ? 'z-[100002]' : 'z-[9999]'} ${
             toast ? "opacity-100 translate-y-0 scale-100" : "opacity-0 translate-y-4 scale-95"
           }`}
         >
@@ -249,16 +426,16 @@ export default function App() {
         </div>
 
         <div 
-          className={`fixed md:relative z-50 top-0 bottom-0 left-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isRosterOpen ? 'w-[85vw] max-w-[320px] md:w-[240px] translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'}`}
+          className={`fixed md:relative top-0 bottom-0 left-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isRosterOpen ? 'w-[85vw] max-w-[320px] md:w-[240px] translate-x-0' : 'w-0 -translate-x-full md:translate-x-0'} ${sidebarZ}`}
           style={{ opacity: isRosterOpen ? 1 : 0 }}
         >
           <div className="w-[85vw] max-w-[320px] md:w-[240px] h-full">
-            <Sidebar activeChannel={activeChannel} setActiveChannel={setActiveChannel} onThreadClick={handleThreadClick} />
+            <Sidebar activeChannel={activeChannel} setActiveChannel={handleChannelChange} onThreadClick={handleThreadClick} guideState={guideState} />
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0 bg-[#313338]">
-          <div className="flex-shrink-0 flex items-center justify-between px-2 md:px-4 py-3 min-h-[48px] z-20 relative border-b border-[rgba(0,0,0,0.22)] shadow-sm bg-[#313338]">
+        <div className={`flex-1 flex flex-col min-w-0 bg-[#313338] ${mainContentZ}`}>
+          <div className={`flex-shrink-0 flex items-center justify-between px-2 md:px-4 py-3 min-h-[48px] relative border-b border-[rgba(0,0,0,0.22)] shadow-sm bg-[#313338] ${calcHeaderZ}`}>
             <div className="flex items-center gap-1 md:gap-3 overflow-hidden pr-2">
               <button onClick={() => setIsRosterOpen(!isRosterOpen)} className={`p-2 transition-colors flex-shrink-0 ${isRosterOpen ? 'text-[#F2F3F5]' : 'text-[#80848E] hover:text-[#DBDEE1]'}`}>
                 <PanelLeft className="w-5 h-5 md:w-[20px] md:h-[20px]" />
@@ -276,21 +453,66 @@ export default function App() {
               )}
             </div>
 
-            <div className="flex items-center gap-1 md:gap-3 flex-shrink-0">
-              <div className="relative flex items-center bg-[#1E1F22] rounded-[4px] px-2 h-[26px] w-[90px] focus-within:w-[150px] md:w-48 md:focus-within:w-64 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border border-[rgba(255,255,255,0.04)]">
+            <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+              <div className="relative">
+                <button 
+                  onClick={() => setHelpMenuOpen(!helpMenuOpen)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-[6px] bg-[#5865F2] hover:bg-[#4752C4] text-white transition-all text-[12px] font-bold shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                  title="Need Help? Open Guides"
+                >
+                  <span className="hidden sm:inline">Need Help?</span>
+                </button>
+                {helpMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[99998]" onClick={() => setHelpMenuOpen(false)} />
+                    <div className="absolute top-full right-0 mt-2 w-56 bg-[#2B2D31] border border-[rgba(255,255,255,0.08)] rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] z-[99999] py-1.5 flex flex-col animate-fade-in">
+                      <button onClick={() => startGuide("main")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                        <GraduationCap className="w-4 h-4" /> Replay Tutorial
+                      </button>
+                      <button onClick={() => startGuide("channels")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                        <Map className="w-4 h-4" /> Channel Guide
+                      </button>
+                      <button onClick={() => startGuide("advanced")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                        <Settings2 className="w-4 h-4" /> Advanced Tools
+                      </button>
+                      <div className="w-full h-px bg-[rgba(255,255,255,0.04)] my-1" />
+                      <button onClick={() => startGuide("developer")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                        <User className="w-4 h-4" /> About the Developer
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="relative hidden md:flex items-center bg-[#1E1F22] rounded-[4px] px-2 h-[26px] w-[90px] focus-within:w-[150px] md:w-48 md:focus-within:w-64 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] border border-[rgba(255,255,255,0.04)]">
                 <input type="text" placeholder="Search..." value={globalSearchQuery} onChange={(e) => setGlobalSearchQuery(e.target.value)} className="bg-transparent text-[12.5px] text-[#DBDEE1] w-full h-full outline-none placeholder-[#949BA4] font-medium" />
                 {globalSearchQuery ? <X className="w-3.5 h-3.5 flex-shrink-0 text-[#949BA4] cursor-pointer hover:text-[#DBDEE1]" onClick={() => setGlobalSearchQuery("")} /> : <Search className="w-3.5 h-3.5 flex-shrink-0 text-[#949BA4]" />}
               </div>
-              <div className="w-px h-4 mx-0 md:mx-1 flex-shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
-              <button onClick={() => setIsAnalyzerOpen(!isAnalyzerOpen)} className={`p-2 transition-colors flex-shrink-0 ${isAnalyzerOpen ? 'text-[#F2F3F5]' : 'text-[#80848E] hover:text-[#DBDEE1]'}`}>
-                <Calculator className="w-5 h-5 md:w-[20px] md:h-[20px]" />
+              <div className="hidden md:block w-px h-4 mx-0 md:mx-1 flex-shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
+              
+              <button 
+                onClick={handleToggleAnalyzer} 
+                className={`relative flex items-center gap-2 px-3 py-1.5 rounded-[6px] transition-all duration-300 shadow-sm font-bold text-[12px] active:scale-95 ${
+                  isAnalyzerOpen 
+                    ? 'bg-[#4752C4] text-white shadow-[0_0_12px_rgba(88,101,242,0.4)]' 
+                    : 'bg-[#5865F2] hover:bg-[#4752C4] text-white'
+                } ${isMainStep3 ? 'animate-wiggle ring-4 ring-[#5865F2] shadow-[0_0_20px_rgba(88,101,242,0.8)]' : ''}`}
+                title="Toggle Trade Analyzer"
+              >
+                <Calculator className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden sm:inline">Calculator</span>
+                {activeItemsCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#ed4245] text-white font-mono font-bold text-[9px] w-4 h-4 rounded-full flex items-center justify-center shadow-md animate-pulse">
+                    {activeItemsCount > 9 ? '9+' : activeItemsCount}
+                  </span>
+                )}
               </button>
             </div>
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden relative">
-            {activeChannel === "home" ? ( <HomeChannel />
-            ) : activeChannel === "tutorial" ? ( <TutorialChannel onToggleAnalyzer={() => setIsAnalyzerOpen(!isAnalyzerOpen)} onAddGive={handleAddGive} onAddGet={handleAddGet} /> 
+            {activeChannel === "home" ? ( <HomeChannel guideState={guideState} />
+            ) : activeChannel === "tutorial" ? ( <TutorialChannel onToggleAnalyzer={handleToggleAnalyzer} onAddGive={handleAddGive} onAddGet={handleAddGet} /> 
             ) : activeChannel === "value-list" ? ( 
               <MainCanvas 
                 activeTierFilter={activeTierFilter} 
@@ -310,8 +532,23 @@ export default function App() {
           </div>
         </div>
 
+        {!isAnalyzerOpen && (
+          <button
+            onClick={handleToggleAnalyzer}
+            className={`md:hidden fixed bottom-6 right-6 z-40 bg-[#5865F2] hover:bg-[#4752C4] text-white p-3.5 rounded-full flex items-center justify-center transition-all active:scale-95 ${isMainStep3 ? '!z-[99999] animate-wiggle ring-4 ring-[#5865F2]/60 shadow-[0_0_30px_rgba(88,101,242,0.8)]' : 'z-40 shadow-[0_4px_20px_rgba(88,101,242,0.5)]'}`}
+            title="Open Calculator"
+          >
+            <Calculator className="w-6 h-6" />
+            {activeItemsCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#ed4245] text-white font-mono font-bold text-[10px] w-5 h-5 rounded-full flex items-center justify-center shadow-md">
+                {activeItemsCount}
+              </span>
+            )}
+          </button>
+        )}
+
         <div 
-          className={`fixed md:relative z-50 top-0 bottom-0 right-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isAnalyzerOpen ? 'w-[90vw] max-w-[400px] md:w-[400px] translate-x-0 pointer-events-auto' : 'w-0 translate-x-full md:translate-x-0 pointer-events-none'}`}
+          className={`fixed md:relative top-0 bottom-0 right-0 flex-shrink-0 overflow-hidden transition-all duration-300 ease-out shadow-2xl md:shadow-none will-change-[width,transform] ${isAnalyzerOpen ? 'w-[90vw] max-w-[400px] md:w-[400px] translate-x-0 pointer-events-auto' : 'w-0 translate-x-full md:translate-x-0 pointer-events-none'} ${analyzerZ}`}
           style={{ opacity: isAnalyzerOpen ? 1 : 0 }}
         >
           <div className="w-[90vw] max-w-[400px] md:w-[400px] h-full bg-[#2B2D31]">
@@ -326,6 +563,7 @@ export default function App() {
               onAdd={handleAddCard} 
               onSwap={handleSwap} 
               onOverwrite={handleOverwrite} 
+              guideState={guideState}
             />
           </div>
         </div>

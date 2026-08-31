@@ -1,4 +1,4 @@
-import { TriangleAlert, Info } from "lucide-react";
+import { TriangleAlert, Info, CornerDownRight, BookOpen } from "lucide-react";
 import { TradeCard, MasterUnit } from "../../../types";
 import { GRID_STATUS_CFG } from "../../../data";
 
@@ -23,7 +23,6 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
     items.forEach(item => {
       const master = ALL_UNITS.find(u => u.id === item.id);
       if (master) {
-        // FIXED: Count and track 'stable' statuses as well instead of skipping them
         if (master.status) {
           statusCounts[master.status] = (statusCounts[master.status] || 0) + item.qty;
         }
@@ -46,6 +45,14 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
 
   if (giveData.details.length === 0 && getData.details.length === 0) return null;
 
+  // Extract unique statuses from both sides to build the glossary at the bottom
+  const uniqueStatuses = Array.from(
+    new Set([
+      ...giveData.details.map(d => d.status),
+      ...getData.details.map(d => d.status)
+    ].filter(Boolean))
+  ) as string[];
+
   const renderMomentum = (counts: [string, number][]) => {
     if (counts.length === 0) return <span className="text-[#80848E] text-[12px] font-medium">None</span>;
     return counts.map(([status, count], i) => {
@@ -66,36 +73,48 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
     });
   };
 
-  const renderSection = (title: string, data: typeof giveData) => {
+  const renderSection = (type: "give" | "get", data: typeof giveData) => {
     if (data.details.length === 0) return null;
+
+    const isGive = type === "give";
+    const accentColor = isGive ? "#FAA61A" : "#5865F2";
+    const bgAccent = isGive ? "rgba(250, 166, 26, 0.03)" : "rgba(88, 101, 242, 0.03)";
+    const title = isGive ? "You Give" : "You Get";
+
     return (
-      <div className="flex flex-col gap-3 mt-4">
-        <h4 className="text-[10px] font-extrabold text-[#949BA4] uppercase tracking-wider">{title}</h4>
-        <div className="flex flex-col gap-4">
+      <div 
+        className="flex flex-col gap-2.5 mt-3 p-3.5 rounded-[8px] border border-[rgba(255,255,255,0.03)] shadow-inner" 
+        style={{ backgroundColor: bgAccent }}
+      >
+        <div className="flex items-center gap-2 border-b border-[rgba(255,255,255,0.04)] pb-2.5 mb-1">
+          <div className="w-1.5 h-1.5 rounded-full shadow-sm" style={{ backgroundColor: accentColor }} />
+          <h4 className="text-[10px] font-extrabold uppercase tracking-widest" style={{ color: accentColor }}>{title}</h4>
+        </div>
+        
+        <div className="flex flex-col gap-3.5">
           {data.details.map((item, idx) => {
              const cfg = item.status ? GRID_STATUS_CFG[item.status as keyof typeof GRID_STATUS_CFG] : null;
              return (
-               <div key={idx} className="flex flex-col gap-1.5">
+               <div key={idx} className="flex flex-col">
                  <div className="flex items-center gap-2">
                    <span className="text-[13px] font-bold text-[#F2F3F5]">{item.name}</span>
                    {cfg && (
                      <span 
-                       className="text-[9px] font-bold uppercase px-1.5 py-[1px] rounded-[4px] border" 
+                       className="text-[9px] font-bold uppercase px-1.5 py-[1px] rounded-[4px] border shadow-sm" 
                        style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.border }}
                      >
                        {cfg.label}
                      </span>
                    )}
                  </div>
-                 {item.status && STATUS_DEFS[item.status] && (
-                   <p className="text-[12px] text-[#B5BAC1] leading-relaxed">
-                     <strong style={{ color: cfg?.color || "#F2F3F5" }}>{item.status.charAt(0).toUpperCase() + item.status.slice(1)}:</strong> {STATUS_DEFS[item.status]}
-                   </p>
-                 )}
+                 {/* Visual Restructuring: Subtle, indented notice text */}
                  {item.notice && (
-                   <p className="text-[12px] text-[#949BA4] leading-relaxed mt-0.5">
-                     {item.notice}
-                   </p>
+                   <div className="flex items-start gap-1.5 mt-1.5 opacity-90">
+                     <CornerDownRight className="w-3.5 h-3.5 text-[#80848E] shrink-0 mt-0.5" />
+                     <p className="text-[11.5px] text-[#B5BAC1] leading-snug italic">
+                       {item.notice}
+                     </p>
+                   </div>
                  )}
                </div>
              );
@@ -114,7 +133,7 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
 
       <div className="p-4 flex flex-col gap-1">
         {(giveData.statusCounts.length > 0 || getData.statusCounts.length > 0) && (
-          <div className="flex flex-col gap-2.5 bg-[#111214] p-3 rounded-[6px] border border-[rgba(255,255,255,0.02)] mb-1">
+          <div className="flex flex-col gap-2.5 bg-[#111214] p-3 rounded-[6px] border border-[rgba(255,255,255,0.02)] mb-1 shadow-inner">
             <div className="flex items-center gap-1.5 mb-0.5">
               <Info className="w-3.5 h-3.5 text-[#5865F2]" />
               <span className="text-[10px] font-bold text-[#949BA4] uppercase tracking-widest">Status Momentum Summary</span>
@@ -136,8 +155,40 @@ export function TradeNotices({ giveItems, getItems, ALL_UNITS }: { giveItems: Tr
           </div>
         )}
 
-        {renderSection("You Give", giveData)}
-        {renderSection("You Get", getData)}
+        {renderSection("give", giveData)}
+        {renderSection("get", getData)}
+
+        {/* Dictionary Grouping: Consolidate all term definitions at the bottom */}
+        {uniqueStatuses.length > 0 && (
+          <div className="mt-5 pt-4 border-t border-[rgba(255,255,255,0.04)] flex flex-col gap-2.5">
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-[#949BA4]" />
+              <span className="text-[10px] font-bold text-[#949BA4] uppercase tracking-widest">Terms in this trade</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {uniqueStatuses.map(status => {
+                const cfg = GRID_STATUS_CFG[status as keyof typeof GRID_STATUS_CFG];
+                const def = STATUS_DEFS[status];
+                if (!cfg || !def) return null;
+
+                return (
+                  <div key={status} className="flex items-start gap-2.5 bg-[#111214] p-2.5 rounded-[6px] border border-[rgba(255,255,255,0.02)] shadow-inner">
+                    <span 
+                      className="text-[9px] font-bold uppercase px-1.5 py-[1px] rounded-[4px] border shrink-0 mt-[1px] shadow-sm" 
+                      style={{ backgroundColor: cfg.bg, color: cfg.color, borderColor: cfg.border }}
+                    >
+                      {cfg.label}
+                    </span>
+                    <p className="text-[11.5px] text-[#DBDEE1] leading-relaxed">
+                      {def}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

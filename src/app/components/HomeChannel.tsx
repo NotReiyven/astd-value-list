@@ -26,7 +26,7 @@ function TiltCard({ children, color, className = "" }: { children: React.ReactNo
   };
 
   return (
-    <div ref={cardRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className={`bg-[#2B2D31] border border-[rgba(255,255,255,0.06)] rounded-[12px] flex flex-col shadow-sm relative overflow-hidden group ${className}`} style={{ ...style, willChange: "transform" }}>
+    <div ref={cardRef} onMouseMove={handleMouseMove} onMouseLeave={handleMouseLeave} className={`bg-[#2B2D31] border border-[rgba(255,255,255,0.06)] rounded-[12px] flex flex-col shadow-sm relative overflow-hidden group transition-all duration-500 ${className}`} style={{ ...style, willChange: "transform" }}>
       <div className="absolute pointer-events-none transition-opacity duration-300 z-0 mix-blend-screen" style={{ top: mousePos.y - 150, left: mousePos.x - 150, width: 300, height: 300, background: `radial-gradient(circle, ${color}25 0%, transparent 70%)`, opacity: isHovering ? 1 : 0 }} />
       <div className="absolute top-0 left-0 right-0 h-[4px] z-20 rounded-t-[12px]" style={{ backgroundColor: color }} />
       <div className="absolute inset-0 opacity-10 pointer-events-none z-0 transition-opacity group-hover:opacity-20 duration-500" style={{ background: `linear-gradient(to bottom, ${color}, transparent)` }} />
@@ -65,11 +65,18 @@ function CreditBadge({ name, color }: { name: string; color: string }) {
   );
 }
 
-export function HomeChannel() {
+export function HomeChannel({ guideState }: { guideState?: { type: string | null; step: number } }) {
   const [activeHomeTab, setActiveHomeTab] = useState<"info" | "updates" | "credits">("info");
   const { changelog } = useUnits();
   const [devSpin, setDevSpin] = useState(0);
   
+  // Force tab switch if developer guide is active
+  useEffect(() => {
+    if (guideState?.type === "developer") {
+      setActiveHomeTab("credits");
+    }
+  }, [guideState]);
+
   // Easter Egg States
   const [secretClicks, setSecretClicks] = useState(0);
   const [secretUnlocked, setSecretUnlocked] = useState(false);
@@ -82,10 +89,6 @@ export function HomeChannel() {
     "Stop trying to impregnate the calculator Alu",
     "GRRs were duped stopped trying to overpay for them"
   ];
-
-  useEffect(() => {
-    console.log("%c ASTD Value List %c- Secret Dev Console Initialized", "color: #5865F2; font-weight: bold;", "color: #FAA61A;");
-  }, []);
 
   const handleSecretClick = () => {
     const next = secretClicks + 1;
@@ -148,14 +151,12 @@ export function HomeChannel() {
             <button onClick={() => setActiveHomeTab("updates")} className={`px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all ${activeHomeTab === "updates" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}>Patch Notes</button>
             <button onClick={() => setActiveHomeTab("credits")} className={`px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all ${activeHomeTab === "credits" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}>Credits</button>
           </div>
-          {/* Easter egg button trigger */}
           <button onClick={handleSecretClick} title="Secret Easter Egg Button" className="ml-3 px-2 py-1 bg-[#111214] hover:bg-[#202225] text-[#FAA61A] rounded-[4px] text-[11px] font-mono flex items-center gap-1 border border-[rgba(250,166,26,0.2)]">
             <Terminal className="w-3 h-3" /> {secretClicks > 0 ? `${secretClicks}/5` : "click here"}
           </button>
         </div>
       </div>
 
-      {/* SECRET EASTER EGG BANNER */}
       {secretUnlocked && (
         <div className="mx-4 md:mx-6 mt-3 bg-gradient-to-r from-[#5865F2] to-[#a855f7] p-3 rounded-[8px] text-white flex items-center justify-between shadow-lg animate-fade-in">
           <div className="flex items-center gap-2.5 text-[13px] font-bold">
@@ -270,7 +271,7 @@ export function HomeChannel() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               
               {/* DEVELOPER */}
-              <TiltCard color="#8b7a7a" className="col-span-1 md:col-span-2 xl:col-span-3 mb-2 flex-row items-center sm:items-stretch overflow-hidden">
+              <TiltCard color="#5865F2" className={`col-span-1 md:col-span-2 xl:col-span-3 mb-2 flex-row items-center sm:items-stretch overflow-hidden ${guideState?.type === "developer" ? "ring-4 ring-[#5865F2] shadow-[0_0_30px_rgba(88,101,242,0.4)] animate-pulse" : ""}`}>
                 <div className="p-6 relative z-10 flex flex-col sm:flex-row items-center gap-6 w-full">
                   <div onClick={() => setDevSpin((prev) => prev + 360)} className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full border-[3px] border-[#2B2D31] shadow-[0_0_0_2px_rgba(237,66,69,0.4),_0_8px_24px_rgba(237,66,69,0.3)] overflow-hidden shrink-0 cursor-pointer" style={{ transform: `rotateY(${devSpin}deg)`, transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)" }} title="Click me!">
                     <img src="https://media.discordapp.net/attachments/1543674169173221520/1543674222495399936/568438777_4285260958469405_5495238692606870157_n.png?ex=6a95ba26&is=6a9468a6&hm=dd0babf47070b8017b1fb83cb00e9ac41366029d8b9480a7f940faba90b7bc6e&=&format=webp&quality=lossless" alt="Reiyven" draggable={false} className="w-full h-full object-cover" />

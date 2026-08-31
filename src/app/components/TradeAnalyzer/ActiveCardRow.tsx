@@ -15,6 +15,8 @@ const QuantityInput = memo(({ qty, onChange }: { qty: number; onChange: (val: nu
   const handleBlur = () => {
     let parsed = parseInt(val, 10);
     if (isNaN(parsed) || parsed < 1) parsed = 1;
+    // Prevent calculator abuse by clamping max quantity
+    if (parsed > 9999) parsed = 9999;
     setVal(parsed.toString());
     if (parsed !== qty) onChange(parsed);
   };
@@ -53,14 +55,13 @@ export const ActiveCardRow = memo(function ActiveCardRow({
   const dropCfg = masterData?.status ? GRID_STATUS_CFG[masterData.status as keyof typeof GRID_STATUS_CFG] : null;
   const proxyUrl = getProxyImage(masterData?.imageUrl);
 
-  const handleQtyInput = useCallback((newQty: number) => onQtyChange(card.id, newQty), [card.id, onQtyChange]);
+  const handleQtyInput = useCallback((newQty: number) => onQtyChange(card.id, Math.min(newQty, 9999)), [card.id, onQtyChange]);
   const handleMinus = useCallback(() => onQtyChange(card.id, Math.max(1, card.qty - 1)), [card.id, card.qty, onQtyChange]);
-  const handlePlus = useCallback(() => onQtyChange(card.id, card.qty + 1), [card.id, card.qty, onQtyChange]);
+  const handlePlus = useCallback(() => onQtyChange(card.id, Math.min(card.qty + 1, 9999)), [card.id, card.qty, onQtyChange]);
   const handleRemove = useCallback(() => onRemove(card.id), [card.id, onRemove]);
   const handlePin = useCallback(() => onTogglePin(card.id), [card.id, onTogglePin]);
 
   return (
-    // PERFORMANCE FIX: contentVisibility isolates this row from layout thrashing
     <div 
       className={`flex items-center gap-2 bg-[#2B2D31] hover:bg-[rgba(255,255,255,0.02)] p-2 rounded-[8px] border transition-colors group ${isPinned ? "border-[#5865F2] shadow-[0_0_8px_rgba(88,101,242,0.15)]" : "border-[rgba(255,255,255,0.04)]"}`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '58px' }}
@@ -102,30 +103,33 @@ export const ActiveCardRow = memo(function ActiveCardRow({
          )}
       </div>
 
-      <div className="flex items-center gap-2 flex-shrink-0">
-         <span className="text-[13px] md:text-[14px] font-bold text-[#F2F3F5] font-mono tracking-tight text-right mr-1 flex-shrink-0">
+      <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+         <span 
+           className="text-[13px] md:text-[14px] font-bold text-[#F2F3F5] font-mono tracking-tight text-right mr-1 flex-shrink-1 min-w-0 truncate max-w-[80px]" 
+           title={card.value === 0 ? "O/C" : (card.value * card.qty).toLocaleString()}
+         >
            {card.value === 0 ? "O/C" : (card.value * card.qty).toLocaleString()}
          </span>
          
-         <div className="flex items-center bg-[#1E1F22] rounded-[4px] p-0.5 border border-[rgba(255,255,255,0.04)] shadow-inner">
-            <button 
-              onClick={handleMinus} 
-              className="w-5 h-5 flex items-center justify-center text-[#949BA4] hover:text-[#DBDEE1] hover:bg-[#2B2D31] rounded-[3px] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]"
-            >
-              <Minus className="w-3 h-3" />
-            </button>
-            
-            <QuantityInput qty={card.qty} onChange={handleQtyInput} />
-            
-            <button 
-              onClick={handlePlus} 
-              className="w-5 h-5 flex items-center justify-center text-[#949BA4] hover:text-[#DBDEE1] hover:bg-[#2B2D31] rounded-[3px] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
+         <div className="flex items-center bg-[#1E1F22] rounded-[4px] p-0.5 border border-[rgba(255,255,255,0.04)] shadow-inner flex-shrink-0">
+           <button 
+             onClick={handleMinus} 
+             className="w-5 h-5 flex items-center justify-center text-[#949BA4] hover:text-[#DBDEE1] hover:bg-[#2B2D31] rounded-[3px] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]"
+           >
+             <Minus className="w-3 h-3" />
+           </button>
+           
+           <QuantityInput qty={card.qty} onChange={handleQtyInput} />
+           
+           <button 
+             onClick={handlePlus} 
+             className="w-5 h-5 flex items-center justify-center text-[#949BA4] hover:text-[#DBDEE1] hover:bg-[#2B2D31] rounded-[3px] transition-colors active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]"
+           >
+             <Plus className="w-3 h-3" />
+           </button>
          </div>
          
-         <div className="flex items-center ml-0.5">
+         <div className="flex items-center ml-0.5 flex-shrink-0">
            <button 
              onClick={handlePin} 
              title={isPinned ? "Unpin unit" : "Pin unit (prevents clearing)"}

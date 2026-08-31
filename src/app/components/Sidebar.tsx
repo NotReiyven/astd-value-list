@@ -35,10 +35,12 @@ export function Sidebar({
   activeChannel,
   setActiveChannel,
   onThreadClick,
+  guideState
 }: {
   activeChannel: string;
   setActiveChannel: (c: string) => void;
   onThreadClick: (tier: FilterKey, sectionId: string) => void;
+  guideState?: { type: string | null; step: number };
 }) {
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const { units } = useUnits();
@@ -47,7 +49,6 @@ export function Sidebar({
     const order = ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"];
     const colorMap: Record<string, string> = { S: "#dd7e6b", A: "#a855f7", B: "#3b82f6", C: "#22c55e", Pure: "#9ca3af", Oddities: "#8b5cf6", Untiered: "#52525b" };
     
-    // Strict quality hierarchy weight for standard tiers
     const subCatPriority: Record<string, number> = {
       "top": 1,
       "high": 2,
@@ -59,7 +60,6 @@ export function Sidebar({
       const tierUnits = units.filter(u => getTier(u) === tier);
       let subCats = Array.from(new Set(tierUnits.map(u => u.subCategory || "Uncategorized")));
       
-      // Enforce strict Top -> High -> Mid -> Low ordering for standard tiers
       if (["S", "A", "B", "C"].includes(tier)) {
         subCats.sort((a, b) => {
           const getRank = (name: string) => {
@@ -108,8 +108,10 @@ export function Sidebar({
         <div className="flex flex-col px-2 pb-6">
           {CATEGORIES.map((cat) => {
             const isCollapsed = collapsedCategories[cat.id];
+            const isChannelGuide = guideState?.type === "channels" && cat.id === "important";
+
             return (
-              <div key={cat.id} className="mt-4 flex flex-col">
+              <div key={cat.id} className={`mt-4 flex flex-col rounded-[8px] transition-all ${isChannelGuide ? "ring-2 ring-[#5865F2] bg-[rgba(88,101,242,0.05)] shadow-[0_0_20px_rgba(88,101,242,0.2)] animate-pulse p-1" : ""}`}>
                 <div 
                   className="flex items-center justify-between px-0.5 mb-1 group cursor-pointer text-[#949BA4] hover:text-[#DBDEE1]"
                   onClick={() => toggleCategory(cat.id)}
@@ -128,6 +130,7 @@ export function Sidebar({
                   <div className="overflow-hidden flex flex-col min-h-0">
                     {cat.channels.map((channel) => {
                       const isActive = activeChannel === channel.id;
+                      const isTarget = guideState?.type === "main" && guideState.step === 1 && channel.id === "value-list";
                       const Icon = channel.icon || Hash;
                       
                       return (
@@ -138,7 +141,7 @@ export function Sidebar({
                               isActive
                                 ? "bg-[rgba(78,80,88,0.6)] text-[#F2F3F5] translate-x-1"
                                 : "text-[#80848E] hover:bg-[rgba(78,80,88,0.3)] hover:text-[#DBDEE1] hover:translate-x-1"
-                            }`}
+                            } ${isTarget ? "ring-2 ring-[#5865F2] bg-[#5865F2]/20 animate-sonar" : ""}`}
                           >
                             <div className="flex items-center gap-1.5 min-w-0">
                               {channel.isLocked ? (

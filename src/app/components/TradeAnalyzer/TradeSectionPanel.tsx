@@ -124,6 +124,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
 
   const isGive = type === "give";
   const themeColorRGB = isGive ? "250, 166, 26" : "88, 101, 242"; 
+  const accentColorHex = isGive ? "#FAA61A" : "#5865F2";
   
   let dropZoneStyle = {
     padding: items.length === 0 ? "24px 16px" : "0px",
@@ -146,9 +147,11 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
     <div className="px-4 py-3">
       <div className="flex items-baseline justify-between mb-3">
         <div className="flex items-center gap-2">
+          {/* IMPROVED: Color-coded subtle label accent */}
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: accentColorHex }} />
           <p
-            className="text-[12px] font-bold uppercase tracking-wider"
-            style={{ color: "#949BA4", fontFamily: "'Inter', sans-serif" }}
+            className="text-[12px] font-extrabold uppercase tracking-wider"
+            style={{ color: "#F2F3F5", fontFamily: "'Inter', sans-serif" }}
           >
             {label}
           </p>
@@ -179,7 +182,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
           className="flex items-center gap-2 px-3 py-2 rounded-[6px] focus-within:ring-2 focus-within:ring-[#5865F2]"
           style={{
             background: "#1E1F22",
-            border: open ? "1px solid rgba(88,101,242,0.4)" : "1px solid transparent",
+            border: open ? `1px solid ${accentColorHex}66` : "1px solid transparent",
             transition: "all 0.15s",
           }}
         >
@@ -188,9 +191,9 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
             ref={searchInputRef}
             type="text"
             value={query}
-            placeholder="Search anime or in-game name..."
+            placeholder={`Search units for ${label.toLowerCase()}...`}
             className="flex-1 bg-transparent outline-none text-[13px] font-medium"
-            style={{ color: "#DBDEE1", fontFamily: "'Inter', sans-serif", caretColor: "#5865F2" }}
+            style={{ color: "#DBDEE1", fontFamily: "'Inter', sans-serif", caretColor: accentColorHex }}
             onChange={(e) => { 
               setQuery(e.target.value); 
               setOpen(true); 
@@ -207,7 +210,6 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
                 setSelectedIndex(prev => Math.min(prev + 1, results.length - 1));
               } else if (e.key === "ArrowUp") {
                 e.preventDefault();
-                // FIXED: Proper clamping preventing instant jump to index 0 from -1
                 setSelectedIndex(prev => (prev <= 0 ? -1 : prev - 1));
               } else if (e.key === "Enter") {
                 e.preventDefault();
@@ -316,7 +318,7 @@ export const TradeSectionPanel = memo(function TradeSectionPanel({
           <div className="flex flex-col items-center justify-center pointer-events-none gap-2 opacity-80">
             <Plus style={{ width: 24, height: 24, color: isDraggingOver ? `rgb(${themeColorRGB})` : "#80848E" }} />
             <p className="text-[12px] font-medium" style={{ color: isDraggingOver ? `rgb(${themeColorRGB})` : "#80848E", fontFamily: "'Inter', sans-serif" }}>
-              {isDraggingOver ? "Drop to add" : "Search or drop units here"}
+              {isDraggingOver ? "Drop to add" : `Search or drop units for ${label.toLowerCase()}`}
             </p>
           </div>
         ) : (
