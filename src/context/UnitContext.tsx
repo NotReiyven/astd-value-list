@@ -16,7 +16,8 @@ type UnitContextType = {
 };
 
 // Bumped to v3 for the IndexedDB migration
-const CACHE_VERSION = "astd_cache_v3"; 
+// In src/context/UnitContext.tsx
+const CACHE_VERSION = "astd_cache_v4"; // Bump from v3 to v4
 
 const UnitContext = createContext<UnitContextType>({
   units: LOCAL_FALLBACK_UNITS,

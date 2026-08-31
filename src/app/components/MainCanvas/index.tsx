@@ -9,16 +9,18 @@ import { UnitListTable } from "./UnitListTable";
 import { TierBanner, DynamicTierSection, processUnits } from "./TierSections";
 import { CanvasSkeleton } from "./CanvasSkeleton";
 import { CanvasControls } from "./CanvasControls";
+import { GuideType } from "../guides/AquaGuideOverlay";
 
 const STICKY_HEADER_CLASS = "relative z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
 
 export const MainCanvas = memo(function MainCanvas({
-  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet, scrollToSection,
+  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet, scrollToSection, startGuide
 }: {
   activeTierFilter: FilterKey; setActiveTierFilter: (f: FilterKey) => void;
   searchQuery: string; setSearchQuery: (s: string) => void;
   onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void;
   scrollToSection?: { tier: string; sectionId: string } | null;
+  startGuide: (type: GuideType) => void;
 }) {
   const { units: ALL_UNITS, isLoading } = useUnits(); 
   const tier = TIER_CONFIG[activeTierFilter] ?? TIER_CONFIG["S"];
@@ -155,7 +157,7 @@ export const MainCanvas = memo(function MainCanvas({
         hasFiltersApplied={hasFiltersApplied}
         handleResetFilters={handleResetFilters}
         statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
+        setStatusFilter={(s) => { setStatusFilter(s); startGuide("filters"); }} // TRIGGER GUIDE
         sortMode={sortMode}
         setSortMode={setSortMode}
         viewMode={viewMode}

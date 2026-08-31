@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { PopupUnit } from "../../types";
 import { GRID_STATUS_CFG } from "../../data";
+import { GuideType } from "./guides/AquaGuideOverlay";
 
 function SpotlightCard({ children, color, className = "" }: { children: React.ReactNode, color: string, className?: string }) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -112,11 +113,13 @@ function TiltCard({ children, color, className = "" }: { children: React.ReactNo
 export function TutorialChannel({
   onToggleAnalyzer,
   onAddGive,
-  onAddGet
+  onAddGet,
+  startGuide
 }: {
   onToggleAnalyzer: () => void;
   onAddGive: (u: PopupUnit) => void;
   onAddGet: (u: PopupUnit) => void;
+  startGuide: (type: GuideType) => void;
 }) {
   const [activeTab, setActiveTab] = useState<"platform" | "tags" | "stats">("platform");
   const [lastAction, setLastAction] = useState<{ type: "give" | "get"; unit: string } | null>(null);
@@ -124,7 +127,7 @@ export function TutorialChannel({
   const [dragClicked, setDragClicked] = useState(false);
   const [sparks, setSparks] = useState<{id: number, x: number, y: number, tx: number, ty: number, color: string}[]>([]);
 
-  // 🔥 NEW EASTER EGG: DEV GOD MODE & HYPE CLICKER MINI-GAME
+  // EASTER EGG
   const [godModeClicks, setGodModeClicks] = useState(0);
   const [godModeActive, setGodModeActive] = useState(false);
   const [comboPoints, setComboPoints] = useState(0);
@@ -256,7 +259,6 @@ export function TutorialChannel({
         .stat-bar { height: 6px; border-radius: 4px; transition: width 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
       `}</style>
 
-      {/* GOD MODE BANNER */}
       {godModeActive && (
         <div className="bg-gradient-to-r from-red-600 via-amber-500 to-indigo-600 px-4 py-2 text-white flex items-center justify-between shadow-md text-xs font-bold animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
@@ -267,18 +269,17 @@ export function TutorialChannel({
         </div>
       )}
 
-      {/* Tabs */}
       <div className="flex-shrink-0 px-4 md:px-6 py-3 border-b border-[rgba(255,255,255,0.04)] bg-[#2B2D31]">
         <div className="flex bg-[#1E1F22] rounded-[6px] p-1 border border-[rgba(255,255,255,0.04)] w-full md:w-fit overflow-x-auto hide-scrollbar">
           <button onClick={() => setActiveTab("platform")} className={`flex items-center gap-1.5 px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all whitespace-nowrap ${activeTab === "platform" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}><Rocket className="w-3.5 h-3.5" /> Platform Guide</button>
           <button onClick={() => setActiveTab("tags")} className={`flex items-center gap-1.5 px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all whitespace-nowrap ${activeTab === "tags" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}><Tag className="w-3.5 h-3.5" /> Unit Tags</button>
-          <button onClick={() => setActiveTab("stats")} className={`flex items-center gap-1.5 px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all whitespace-nowrap ${activeTab === "stats" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}><BarChart3 className="w-3.5 h-3.5" /> R / S / D Stats</button>
+          
+          {/* TRIGGER STATS GUIDE ON CLICK */}
+          <button onClick={() => { setActiveTab("stats"); startGuide("stats"); }} className={`flex items-center gap-1.5 px-6 py-1.5 rounded-[4px] text-[12px] font-bold transition-all whitespace-nowrap ${activeTab === "stats" ? "bg-[#5865F2] text-white shadow-sm" : "text-[#949BA4] hover:text-[#DBDEE1]"}`}><BarChart3 className="w-3.5 h-3.5" /> R / S / D Stats</button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6">
-
-        {/* PLATFORM GUIDE */}
         {activeTab === "platform" && (
           <div className="animate-fade-in pb-4">
             
@@ -466,7 +467,6 @@ export function TutorialChannel({
           </div>
         )}
 
-        {/* UNIT TAGS */}
         {activeTab === "tags" && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 animate-fade-in pb-4">
             <TiltCard color="#5865F2">
@@ -529,7 +529,6 @@ export function TutorialChannel({
           </div>
         )}
 
-        {/* R/S/D STATS */}
         {activeTab === "stats" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 animate-fade-in pb-4">
             <TiltCard color="#4DB6AC">

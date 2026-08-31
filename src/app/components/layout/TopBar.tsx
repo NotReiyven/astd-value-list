@@ -1,4 +1,5 @@
-import { PanelLeft, Hash, Search, X, GraduationCap, Map, User, Settings2, Calculator } from "lucide-react";
+import { useState } from "react";
+import { PanelLeft, Hash, Search, X, GraduationCap, Map, User, Settings2, Calculator, HelpCircle, Book } from "lucide-react";
 import { GuideType } from "../guides/AquaGuideOverlay";
 
 interface TopBarProps {
@@ -32,6 +33,27 @@ export function TopBar({
   isMainStep3,
   activeItemsCount
 }: TopBarProps) {
+  const [helpClicks, setHelpClicks] = useState(0);
+  const [lastClickTime, setLastClickTime] = useState(0);
+
+  const handleHelpClick = () => {
+    const now = Date.now();
+    // Reset combo if it's been more than 10 seconds since the last click
+    if (now - lastClickTime > 10000) {
+      setHelpClicks(1);
+    } else {
+      if (helpClicks + 1 >= 3) {
+        setHelpMenuOpen(false);
+        startGuide("annoyed");
+        setHelpClicks(0);
+        return;
+      }
+      setHelpClicks(prev => prev + 1);
+    }
+    setLastClickTime(now);
+    setHelpMenuOpen(!helpMenuOpen);
+  };
+
   return (
     <div className={`flex-shrink-0 flex items-center justify-between px-2 md:px-4 py-3 min-h-[48px] relative border-b border-[rgba(0,0,0,0.22)] shadow-sm bg-[#313338] ${calcHeaderZ}`}>
       <div className="flex items-center gap-1 md:gap-3 overflow-hidden pr-2">
@@ -54,27 +76,46 @@ export function TopBar({
       <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
         <div className="relative">
           <button 
-            onClick={() => setHelpMenuOpen(!helpMenuOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-[6px] bg-[#5865F2] hover:bg-[#4752C4] text-white transition-all text-[12px] font-bold shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            onClick={handleHelpClick}
+            className="flex items-center justify-center gap-2 px-3 py-1.5 rounded-[6px] bg-[#5865F2] hover:bg-[#4752C4] text-white transition-all text-[12px] font-bold shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
             title="Need Help? Open Guides"
           >
+            <HelpCircle className="w-4 h-4 sm:hidden flex-shrink-0" />
             <span className="hidden sm:inline">Need Help?</span>
           </button>
           {helpMenuOpen && (
             <>
               <div className="fixed inset-0 z-[99998]" onClick={() => setHelpMenuOpen(false)} />
-              <div className="absolute top-full right-0 mt-2 w-56 bg-[#2B2D31] border border-[rgba(255,255,255,0.08)] rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] z-[99999] py-1.5 flex flex-col animate-fade-in">
-                <button onClick={() => startGuide("main")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+              <div className="absolute top-full right-0 mt-2 w-56 bg-[#2B2D31] border border-[rgba(255,255,255,0.08)] rounded-[8px] shadow-[0_8px_24px_rgba(0,0,0,0.5)] z-[99999] py-1.5 flex flex-col animate-fade-in max-h-[70vh] overflow-y-auto custom-scrollbar">
+                
+                <span className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#949BA4]">Platform Basics</span>
+                <button onClick={() => startGuide("main")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
                   <GraduationCap className="w-4 h-4" /> Replay Tutorial
                 </button>
-                <button onClick={() => startGuide("channels")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                <button onClick={() => startGuide("channels")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
                   <Map className="w-4 h-4" /> Channel Guide
                 </button>
-                <button onClick={() => startGuide("advanced")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
-                  <Settings2 className="w-4 h-4" /> Advanced Tools
+                <button onClick={() => startGuide("stats")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
+                  <Settings2 className="w-4 h-4" /> R / S / D Stats
                 </button>
+                
                 <div className="w-full h-px bg-[rgba(255,255,255,0.04)] my-1" />
-                <button onClick={() => startGuide("developer")} className="flex items-center gap-3 px-4 py-2.5 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[13px] font-semibold">
+                <span className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[#949BA4]">Pro Tools</span>
+                <button onClick={() => startGuide("advanced")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
+                  <Settings2 className="w-4 h-4" /> Advanced Gestures
+                </button>
+                <button onClick={() => startGuide("filters")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
+                  <Search className="w-4 h-4" /> Market Status Filters
+                </button>
+                <button onClick={() => startGuide("dictionary")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
+                  <Book className="w-4 h-4" /> Smart Dictionary
+                </button>
+                <button onClick={() => startGuide("management")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
+                  <Calculator className="w-4 h-4" /> Pinning & Clearing
+                </button>
+
+                <div className="w-full h-px bg-[rgba(255,255,255,0.04)] my-1" />
+                <button onClick={() => startGuide("developer")} className="flex items-center gap-3 px-4 py-2 text-[#DBDEE1] hover:bg-[#5865F2] hover:text-white transition-colors text-left text-[12.5px] font-semibold">
                   <User className="w-4 h-4" /> About the Developer
                 </button>
               </div>

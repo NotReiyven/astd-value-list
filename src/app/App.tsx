@@ -4,6 +4,7 @@ import { FilterKey, PopupUnit, TradeCard } from "../types";
 import { useStickyState, isTradeCardArray, isBoolean, isNonEmptyString } from "../hooks/useStickyState";
 import { AquaGuideOverlay, GuideType } from "./components/guides/AquaGuideOverlay";
 import { TopBar } from "./components/layout/TopBar";
+import { WelcomeModal } from "./components/WelcomeModal";
 
 const TradeAnalyzerPanel = lazy(() => import("./components/TradeAnalyzer").then(module => ({ default: module.TradeAnalyzerPanel })));
 const Sidebar = lazy(() => import("./components/Sidebar").then(module => ({ default: module.Sidebar })));
@@ -29,6 +30,12 @@ export default function App() {
   const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel", isNonEmptyString);
   const [activeTierFilter, setActiveTierFilter] = useStickyState<FilterKey>("S", "astd_tier");
 
+  const [completedGuides, setCompletedGuides] = useStickyState<Record<string, boolean>>(
+    {}, 
+    "astd_completed_guides", 
+    (v): v is Record<string, boolean> => typeof v === "object" && v !== null
+  );
+
   const [scrollToSection, setScrollToSection] = useState<{ tier: string; sectionId: string } | null>(null);
   const [isRosterOpen, setIsRosterOpen] = useStickyState(window.innerWidth >= 768, "astd_roster", isBoolean);
   const [isAnalyzerOpen, setIsAnalyzerOpen] = useStickyState(false, "astd_analyzer", isBoolean);
@@ -40,29 +47,41 @@ export default function App() {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (localStorage.getItem("astd_tutorial_done") !== "true") {
+      if (!completedGuides["main"]) {
         setGuideState({ type: "main", step: 1 });
         if (window.innerWidth < 768) setIsRosterOpen(true);
+      } else if (localStorage.getItem("astd_welcome_acknowledged") !== "true") {
+        window.dispatchEvent(new Event("open-welcome-modal"));
       }
     }, 500);
     return () => clearTimeout(timer);
-  }, [setIsRosterOpen]);
+  }, [setIsRosterOpen, completedGuides]);
 
-  const startGuide = useCallback((type: GuideType) => {
+  const startGuide = useCallback((type: GuideType, force: boolean = false) => {
+    if (!force && type && completedGuides[type]) return;
+
     setHelpMenuOpen(false);
     setGuideState({ type, step: 1 });
     
     if (type === "developer") setActiveChannel("home");
-    else if (type === "advanced") setIsAnalyzerOpen(true);
+    else if (type === "advanced" || type === "dictionary" || type === "management") setIsAnalyzerOpen(true);
     else if (type === "channels" || type === "main") {
       if (window.innerWidth < 768) setIsRosterOpen(true);
     }
-  }, [setActiveChannel, setIsAnalyzerOpen, setIsRosterOpen]);
+  }, [completedGuides, setActiveChannel, setIsAnalyzerOpen, setIsRosterOpen]);
 
   const endGuide = useCallback(() => {
-    if (guideState.type === "main") localStorage.setItem("astd_tutorial_done", "true");
+    if (guideState.type) {
+      setCompletedGuides(prev => ({ ...prev, [guideState.type as string]: true }));
+      
+      if (guideState.type === "main") {
+        if (localStorage.getItem("astd_welcome_acknowledged") !== "true") {
+          setTimeout(() => window.dispatchEvent(new Event("open-welcome-modal")), 400);
+        }
+      }
+    }
     setGuideState({ type: null, step: 0 });
-  }, [guideState.type]);
+  }, [guideState.type, setCompletedGuides]);
 
   useEffect(() => {
     if (!toast) return;
@@ -104,7 +123,7 @@ export default function App() {
       else if (!isRosterOpen && window.innerWidth < 768) setIsRosterOpen(true);
     } else if (dx < -60) {
       if (isRosterOpen) setIsRosterOpen(false);
-      else if (!isAnalyzerOpen && window.innerWidth < 768) setIsRosterOpen(true);
+      else if (!isAnalyzerOpen && window.innerWidth < 768) setIsAnalyzerOpen(true);
     }
     touchStartPos.current = null;
   }, [isAnalyzerOpen, isRosterOpen, setIsAnalyzerOpen, setIsRosterOpen]);
@@ -215,9 +234,9 @@ export default function App() {
   const isMainStep4 = guideState.type === "main" && guideState.step === 4;
 
   const sidebarZ = isMainStep1 || guideState.type === "channels" ? "!z-[100000] shadow-[15px_0_50px_rgba(0,0,0,0.8)]" : "z-50";
-  const mainContentZ = isMainStep2 || guideState.type === "developer" ? "!z-[100000] relative shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "";
+  const mainContentZ = isMainStep2 || guideState.type === "developer" || guideState.type === "filters" || guideState.type === "stats" ? "!z-[100000] relative shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "";
   const calcHeaderZ = helpMenuOpen || isMainStep3 ? "!z-[99999] shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "z-30";
-  const analyzerZ = isMainStep4 || guideState.type === "advanced" ? "!z-[100000] shadow-[-20px_0_50px_rgba(0,0,0,0.8)]" : "z-50";
+  const analyzerZ = isMainStep4 || guideState.type === "advanced" || guideState.type === "dictionary" || guideState.type === "management" ? "!z-[100000] shadow-[-20px_0_50px_rgba(0,0,0,0.8)]" : "z-50";
 
   return (
     <div 
@@ -244,6 +263,7 @@ export default function App() {
       `}</style>
       <Suspense fallback={null}>
         
+        <WelcomeModal />
         <AquaGuideOverlay guideState={guideState} onEndGuide={endGuide} />
 
         {isRosterOpen && <div className="md:hidden fixed inset-0 bg-black/60 z-40 animate-fade-in" onClick={() => setIsRosterOpen(false)} />}
@@ -284,7 +304,7 @@ export default function App() {
             currentChannelInfo={currentChannelInfo}
             helpMenuOpen={helpMenuOpen}
             setHelpMenuOpen={setHelpMenuOpen}
-            startGuide={startGuide}
+            startGuide={(type) => startGuide(type, true)}
             globalSearchQuery={globalSearchQuery}
             setGlobalSearchQuery={setGlobalSearchQuery}
             handleToggleAnalyzer={handleToggleAnalyzer}
@@ -295,7 +315,13 @@ export default function App() {
 
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {activeChannel === "home" ? ( <HomeChannel guideState={guideState} />
-            ) : activeChannel === "tutorial" ? ( <TutorialChannel onToggleAnalyzer={handleToggleAnalyzer} onAddGive={handleAddGive} onAddGet={handleAddGet} /> 
+            ) : activeChannel === "tutorial" ? ( 
+              <TutorialChannel 
+                onToggleAnalyzer={handleToggleAnalyzer} 
+                onAddGive={handleAddGive} 
+                onAddGet={handleAddGet} 
+                startGuide={startGuide} 
+              /> 
             ) : activeChannel === "value-list" ? ( 
               <MainCanvas 
                 activeTierFilter={activeTierFilter} 
@@ -305,6 +331,7 @@ export default function App() {
                 onAddGive={handleAddGive} 
                 onAddGet={handleAddGet} 
                 scrollToSection={scrollToSection}
+                startGuide={startGuide}
               />
             ) : activeChannel === "extra-notices" ? ( <ExtraNoticesChannel />
             ) : (
@@ -347,6 +374,7 @@ export default function App() {
               onSwap={handleSwap} 
               onOverwrite={handleOverwrite} 
               guideState={guideState}
+              startGuide={startGuide}
             />
           </div>
         </div>

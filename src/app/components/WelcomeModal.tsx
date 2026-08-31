@@ -4,14 +4,7 @@ export function WelcomeModal() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Show automatically if they haven't agreed yet
-    const hasAgreed = localStorage.getItem("astd_welcome_acknowledged");
-    if (!hasAgreed) {
-      setIsVisible(true);
-      document.body.style.overflow = "hidden";
-    }
-
-    // Allow opening manually via global event from the Tutorial tab
+    // Allow opening manually via global event from the Tutorial tab or App flow
     const handleOpen = () => {
       setIsVisible(true);
       document.body.style.overflow = "hidden";

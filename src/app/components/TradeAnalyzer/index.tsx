@@ -8,6 +8,7 @@ import { TradeSummaryBox } from "./TradeSummaryBox";
 import { usePanelResize } from "../../../hooks/usePanelResize";
 import { fmtK, generateTextSummary, avgStat } from "./summaryUtils";
 import { useUnits } from "../../../context/UnitContext";
+import { GuideType } from "../guides/AquaGuideOverlay";
 
 export function TradeAnalyzerPanel({
   giveItems,
@@ -19,7 +20,8 @@ export function TradeAnalyzerPanel({
   onOverwrite,
   isOpen = true,
   onClose,
-  guideState
+  guideState,
+  startGuide
 }: {
   giveItems: TradeCard[];
   getItems: TradeCard[];
@@ -32,6 +34,7 @@ export function TradeAnalyzerPanel({
   isOpen?: boolean;
   onClose?: () => void;
   guideState?: { type: string | null; step: number };
+  startGuide: (type: GuideType) => void;
 }) {
   const { units: ALL_UNITS } = useUnits();
   const [copied, setCopied] = useState(false);
@@ -107,7 +110,8 @@ export function TradeAnalyzerPanel({
       else next.add(pinKey);
       return next;
     });
-  }, []);
+    startGuide("management"); // TRIGGER GUIDE
+  }, [startGuide]);
 
   const handleClearSection = useCallback((col: "give" | "get") => {
     if (col === "give") {
@@ -187,7 +191,8 @@ export function TradeAnalyzerPanel({
         </div>
         <span className="text-[14px] md:text-[15px] font-bold flex-1 text-[#F2F3F5] truncate">Trade Analyzer</span>
 
-        <button onClick={() => setSmartMenuOpen(!smartMenuOpen)} className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2] ${smartMenuOpen ? "bg-[rgba(88,101,242,0.15)] text-[#5865F2]" : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"}`} title="Context Recognition">
+        {/* TRIGGER SMART PARSER GUIDE ON CLICK */}
+        <button onClick={() => { setSmartMenuOpen(!smartMenuOpen); startGuide("dictionary"); }} className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2] ${smartMenuOpen ? "bg-[rgba(88,101,242,0.15)] text-[#5865F2]" : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"}`} title="Context Recognition">
           <Wand2 className="w-4 h-4" />
         </button>
         <button onClick={handleGlobalClear} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" title="Clear trade">

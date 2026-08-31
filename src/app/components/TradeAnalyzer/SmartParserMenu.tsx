@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
-import { Wand2, X, Book, HelpCircle, TriangleAlert, Trash2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Wand2, X, Book, HelpCircle, TriangleAlert, Trash2, Search, Check } from "lucide-react";
 import { TradeCard, MasterUnit } from "../../../types";
 import { parseSmartTrade, AmbiguousToken, getSlangCache, removeSlang, learnSlang } from "./smartParser";
+import { getProxyImage } from "../../../data";
+import { getAvatarStyle, getInitials } from "./summaryUtils";
 
 interface SmartParserMenuProps {
   ALL_UNITS: MasterUnit[];
@@ -21,11 +23,42 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
 
   const [slangDict, setSlangDict] = useState<Record<string, string>>({});
   const [newSlangKey, setNewSlangKey] = useState("");
+  
+  // Custom Dropdown State
+  const [searchQuery, setSearchQuery] = useState("");
   const [newSlangTargetId, setNewSlangTargetId] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSlangDict(getSlangCache());
   }, [activeMenuTab]);
+
+  // Handle clicking outside the custom dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, []);
+
+  // Filter units for the custom dropdown
+  const filteredUnits = useMemo(() => {
+    if (!searchQuery.trim()) return ALL_UNITS.slice(0, 50);
+    const q = searchQuery.toLowerCase().trim();
+    return ALL_UNITS.filter(u =>
+      u.name.toLowerCase().includes(q) ||
+      (u.subtitle && u.subtitle.toLowerCase().includes(q)) ||
+      (u.aliases && u.aliases.some(a => a.toLowerCase().includes(q)))
+    ).slice(0, 30);
+  }, [searchQuery, ALL_UNITS]);
 
   const handleSmartImport = useCallback(() => {
     const result = parseSmartTrade(smartInput, ALL_UNITS); 
@@ -77,6 +110,7 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
     setSlangDict(getSlangCache());
     setNewSlangKey("");
     setNewSlangTargetId("");
+    setSearchQuery("");
   };
 
   const handleRemoveSlang = (key: string) => {
@@ -85,7 +119,7 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
   };
 
   return (
-    <div className="mx-3 md:mx-4 mt-3 p-4 bg-[#2B2D31] border border-[#1E1F22] rounded-[8px] animate-fade-in shadow-[0_8px_24px_rgba(0,0,0,0.15)] flex flex-col gap-4">
+    <div className="relative z-50 mx-3 md:mx-4 mt-3 p-4 bg-[#2B2D31] border border-[#1E1F22] rounded-[8px] animate-fade-in shadow-[0_8px_24px_rgba(0,0,0,0.15)] flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <span className="text-[12px] font-bold text-[#F2F3F5] uppercase tracking-wider flex items-center gap-1.5">
           <Wand2 className="w-4 h-4 text-[#5865F2]"/> Smart Parser
@@ -178,24 +212,81 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
         <div className="flex flex-col gap-4 animate-fade-in">
           <div className="flex flex-col gap-2">
              <span className="text-[11px] font-bold text-[#949BA4] uppercase tracking-wider">Add New Slang</span>
-             <div className="flex flex-col sm:flex-row gap-2">
+             <div className="flex flex-col sm:flex-row gap-2 relative">
                 <input 
                   value={newSlangKey} 
                   onChange={e => setNewSlangKey(e.target.value)} 
                   placeholder="e.g. gg" 
-                  className="w-full sm:w-[120px] bg-[#1E1F22] border-none rounded-[4px] px-3 py-2 text-[13px] text-[#F2F3F5] outline-none placeholder-[#80848E] focus:ring-2 focus:ring-[#5865F2]" 
+                  className="w-full sm:w-[100px] shrink-0 bg-[#1E1F22] border border-transparent rounded-[4px] px-3 py-2 text-[13px] text-[#F2F3F5] outline-none placeholder-[#80848E] focus:ring-1 focus:ring-[#5865F2] focus:border-[#5865F2] transition-all" 
                 />
-                <select
-                  value={newSlangTargetId}
-                  onChange={e => setNewSlangTargetId(e.target.value)}
-                  className="flex-1 bg-[#1E1F22] border-none rounded-[4px] px-3 py-2 text-[13px] text-[#F2F3F5] outline-none focus:ring-2 focus:ring-[#5865F2] cursor-pointer appearance-none"
+
+                {/* --- CUSTOM SEARCHABLE DROPDOWN --- */}
+                <div className="relative flex-1" ref={dropdownRef}>
+                  <div className={`flex items-center bg-[#1E1F22] rounded-[4px] px-3 py-2 transition-all border ${isDropdownOpen ? 'border-[#5865F2] ring-1 ring-[#5865F2]' : 'border-transparent'}`}>
+                    <Search className="w-4 h-4 text-[#80848E] mr-2 shrink-0" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={e => {
+                        setSearchQuery(e.target.value);
+                        setIsDropdownOpen(true);
+                        if (newSlangTargetId) setNewSlangTargetId("");
+                      }}
+                      onFocus={() => setIsDropdownOpen(true)}
+                      placeholder="Search target unit..."
+                      className="bg-transparent text-[13px] text-[#F2F3F5] w-full outline-none placeholder-[#80848E]"
+                    />
+                    {newSlangTargetId && <Check className="w-4 h-4 text-[#23a559] ml-2 shrink-0" />}
+                  </div>
+
+                  {isDropdownOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 max-h-[250px] overflow-y-auto custom-scrollbar bg-[#2B2D31] border border-[rgba(255,255,255,0.08)] rounded-[6px] shadow-xl z-50 flex flex-col p-1.5 gap-1">
+                      {filteredUnits.length === 0 ? (
+                         <div className="p-3 text-center text-[12px] text-[#80848E]">No units found.</div>
+                      ) : (
+                         filteredUnits.map(u => {
+                             const proxyUrl = getProxyImage(u.imageUrl);
+                             const valText = u.value === "owner" ? "O/C" : (typeof u.value === "number" ? u.value.toLocaleString() : u.valueMin?.toLocaleString() || "0");
+                             return (
+                                 <button
+                                     key={u.id}
+                                     onClick={() => {
+                                         setNewSlangTargetId(u.id);
+                                         setSearchQuery(u.name);
+                                         setIsDropdownOpen(false);
+                                     }}
+                                     className="flex items-center gap-3 w-full p-2 hover:bg-[#1E1F22] rounded-[4px] transition-colors text-left group"
+                                 >
+                                     <div className="w-8 h-8 rounded-[4px] bg-[#111214] overflow-hidden shrink-0 flex items-center justify-center border border-[rgba(255,255,255,0.04)]">
+                                         {proxyUrl ? (
+                                             <img src={proxyUrl} alt={u.name} className="w-full h-full object-cover" />
+                                         ) : (
+                                             <span className="text-white font-bold text-[10px]" style={getAvatarStyle(u.name)}>{getInitials(u.name)}</span>
+                                         )}
+                                     </div>
+                                     <div className="flex flex-col min-w-0 flex-1">
+                                         <span className="text-[13px] font-bold text-[#F2F3F5] truncate group-hover:text-white transition-colors">{u.name}</span>
+                                         {u.subtitle && <span className="text-[10px] font-medium text-[#949BA4] truncate">{u.subtitle}</span>}
+                                     </div>
+                                     <span className="text-[12px] font-mono font-bold text-[#DBDEE1] shrink-0 ml-2">
+                                         {valText}
+                                     </span>
+                                 </button>
+                             );
+                         })
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* ---------------------------------- */}
+
+                <button 
+                  onClick={handleAddSlang} 
+                  className={`shrink-0 px-4 py-2 rounded-[4px] text-[13px] font-bold transition-colors ${newSlangKey.trim() && newSlangTargetId ? "bg-[#23a559] hover:bg-[#1f914e] text-white" : "bg-[#1E1F22] text-[#80848E] cursor-not-allowed"}`}
+                  disabled={!newSlangKey.trim() || !newSlangTargetId}
                 >
-                   <option value="" disabled>Select target unit...</option>
-                   {[...ALL_UNITS].sort((a,b) => a.name.localeCompare(b.name)).map(u => (
-                     <option key={u.id} value={u.id}>{u.name} {u.subtitle ? `(${u.subtitle})` : ''}</option>
-                   ))}
-                </select>
-                <button onClick={handleAddSlang} className="bg-[#23a559] hover:bg-[#1f914e] text-white px-4 py-2 rounded-[4px] text-[13px] font-bold transition-colors">Add</button>
+                  Add
+                </button>
              </div>
           </div>
           
@@ -208,13 +299,13 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
                  {Object.entries(slangDict).map(([key, targetId]) => {
                    const targetName = ALL_UNITS.find(u => u.id === targetId)?.name || targetId;
                    return (
-                     <div key={key} className="flex items-center justify-between bg-[#1E1F22] p-2.5 rounded-[6px] border border-[rgba(255,255,255,0.02)]">
+                     <div key={key} className="flex items-center justify-between bg-[#1E1F22] p-2.5 rounded-[6px] border border-[rgba(255,255,255,0.02)] hover:border-[rgba(255,255,255,0.06)] transition-colors">
                         <div className="flex items-center gap-3 overflow-hidden">
                           <span className="text-[13px] font-bold text-[#F2F3F5] shrink-0">"{key}"</span>
                           <span className="text-[#80848E] text-[12px]">➔</span>
                           <span className="text-[12.5px] text-[#DBDEE1] truncate">{targetName}</span>
                         </div>
-                        <button onClick={() => handleRemoveSlang(key)} className="text-[#80848E] hover:text-[#ed4245] p-1 transition-colors rounded-[3px] focus-visible:ring-2 focus-visible:ring-[#ed4245]">
+                        <button onClick={() => handleRemoveSlang(key)} className="text-[#80848E] hover:text-[#ed4245] p-1.5 transition-colors rounded-[3px] focus-visible:ring-2 focus-visible:ring-[#ed4245] bg-[rgba(255,255,255,0.02)] hover:bg-[rgba(237,66,69,0.1)]">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                      </div>
