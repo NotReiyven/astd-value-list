@@ -24,6 +24,7 @@ export interface MasterUnit {
   tier?: string; // <-- Add this line
   subCategory?: string;      // Captures "Top S Tier" or "Skins"
   subCategoryRange?: string; // Captures "100,000 - O/C" or "Misc"
+  obtainability?: "OBT" | "UNOB"; // <-- ADD THIS LINE
 }
 
 export type Unit = MasterUnit;

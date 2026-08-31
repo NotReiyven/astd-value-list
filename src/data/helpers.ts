@@ -59,29 +59,43 @@ export function getObtainability(unit?: MasterUnit): "OBT" | "UNOB" {
   const subtitle = (unit.subtitle || "").toLowerCase();
   const id = (unit.id || "").toLowerCase();
 
-  // 1. Gamepasses are always obtainable
-  if (id.startsWith("gp-") || note.includes("gamepass")) {
+  // 1. EXPLICIT SPREADSHEET OVERRIDES
+  // If the spreadsheet explicitly tags it as obtainable, respect it immediately.
+  // This safely catches exactly "(obtainable)" and "(obtainable from...)"
+  if (note.includes("(obtainable)") || note.includes("(obtainable from")) {
     return "OBT";
   }
 
-  // 2. Skins rule: All skins are unobtainable EXCEPT Easter capsule skins
+  // 2. GAMEPASSES
+  // Account for live-synced names that don't have the "gp-" prefix
+  if (
+    id.startsWith("gp-") || 
+    name.includes("gamepass") || 
+    name.includes("star pass") || 
+    name.includes("unit mount") ||
+    note.includes("gamepass")
+  ) {
+    return "OBT";
+  }
+
+  // 3. SKINS RULE
   const isSkin = unit.subCategory?.toLowerCase().includes("skin") || subtitle.includes("skin") || note.includes("skin");
   if (isSkin) {
     if (note.includes("easter capsule")) return "OBT";
     return "UNOB";
   }
 
-  // 3. Explicit Unobtainable Blacklist
+  // 4. EXPLICIT UNOBTAINABLE BLACKLIST
   if (UNOB_BLACKLIST.some(item => id.includes(item) || name.includes(item) || subtitle.includes(item))) {
     return "UNOB";
   }
 
-  // 4. Tradeables obtained through evolving are ALWAYS considered unobtainable
+  // 5. EVOLUTION RESTRICTION
   if (note.includes("evolv") || note.includes("evolution")) {
     return "UNOB";
   }
 
-  // 5. Standard explicit flags
+  // 6. EXPLICIT UNOBTAINABLE TAGS
   if (
     note.includes("unobtainable") || 
     note.includes("unob") || 
@@ -94,7 +108,7 @@ export function getObtainability(unit?: MasterUnit): "OBT" | "UNOB" {
     return "UNOB";
   }
 
-  // 6. General Permitted Obtainables (Capsules, Eggs, Lbs, PvP)
+  // 7. PERMITTED OBTAINABLES
   if (
     note.includes("capsule") || 
     note.includes("egg") || 

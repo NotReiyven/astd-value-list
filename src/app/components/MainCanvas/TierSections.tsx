@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { MasterUnit, PopupUnit } from "../../../types";
+import { MasterUnit } from "../../../types";
 import { UnitGrid } from "./UnitGrid";
 import { UnitListTable } from "./UnitListTable";
 

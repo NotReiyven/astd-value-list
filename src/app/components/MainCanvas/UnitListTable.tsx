@@ -1,7 +1,7 @@
 import { memo, useState, useRef, useMemo } from "react";
-import { Plus, X, Image as ImageIcon, ArrowRight, ArrowLeft } from "lucide-react";
+import { Plus, X, ArrowRight, ArrowLeft } from "lucide-react";
 import { PopupUnit, MasterUnit } from "../../../types";
-import { GRID_STATUS_CFG, getTier, TIER_CONFIG, getProxyImage, getObtainability } from "../../../data";
+import { GRID_STATUS_CFG, getTier, TIER_CONFIG, getProxyImage } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
 import { LazyRender } from "./LazyRender";
 
@@ -42,7 +42,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
   const tierKey = getTier(unit);
   const tierColor = TIER_CONFIG[tierKey]?.badgeColor || "#5865F2";
   const proxyUrl = getProxyImage(unit.imageUrl);
-  const obtainability = getObtainability(unit);
+  const obtainability = unit.obtainability || "UNOB";
 
   const triggerAddedGlow = () => {
     setIsAdded(true);

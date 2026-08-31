@@ -4,7 +4,14 @@ export function WelcomeModal() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Only open manually via global event from the Tutorial tab
+    // Show automatically if they haven't agreed yet
+    const hasAgreed = localStorage.getItem("astd_welcome_acknowledged");
+    if (!hasAgreed) {
+      setIsVisible(true);
+      document.body.style.overflow = "hidden";
+    }
+
+    // Allow opening manually via global event from the Tutorial tab
     const handleOpen = () => {
       setIsVisible(true);
       document.body.style.overflow = "hidden";
@@ -65,7 +72,7 @@ export function WelcomeModal() {
             onClick={handleAccept}
             className="px-6 py-2 bg-[#5865F2] hover:bg-[#4752C4] text-white rounded-[4px] text-[13px] font-medium transition-all active:scale-[0.98]"
           >
-            Got it
+            Continue to Website
           </button>
         </div>
       </div>

@@ -1,62 +1,16 @@
 import { useState, useRef, useDeferredValue, useMemo, memo, useEffect } from "react";
-import { Search, X, LayoutGrid, List, ArrowUpDown, Filter, ArrowUp } from "lucide-react";
+import { Search, X, ArrowUp } from "lucide-react";
 import { PopupUnit, FilterKey, MasterUnit } from "../../../types";
-import { TIER_CONFIG, FILTERS, getTier } from "../../../data"; 
+import { TIER_CONFIG, getTier } from "../../../data"; 
 import { useUnits } from "../../../context/UnitContext"; 
 
-import { CustomDropdown } from "./CustomDropdown";
 import { UnitGrid } from "./UnitGrid";
 import { UnitListTable } from "./UnitListTable";
 import { TierBanner, DynamicTierSection, processUnits } from "./TierSections";
-
-const SORT_OPTIONS = {
-  "value-desc": "Value: High to Low", "value-asc": "Value: Low to High",
-  "demand-desc": "Demand: High to Low", "supply-asc": "Supply: Rarest First",
-  "rarity-desc": "Rarity: Rarest First", "alpha-asc": "Alphabetical: A-Z"
-};
-
-const FILTER_OPTIONS = {
-  "all": "All Statuses", "stable": "Stable", "unstable": "Unstable",
-  "rising": "Rising", "dropping": "Dropping", "inflated": "Inflated",
-  "deflated": "Deflated", "varies": "Varies", "maximum": "Maximum",
-  "gatekept": "Gatekept", "hyped": "Hyped", "black-marketed": "Black Market"
-};
+import { CanvasSkeleton } from "./CanvasSkeleton";
+import { CanvasControls } from "./CanvasControls";
 
 const STICKY_HEADER_CLASS = "relative z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
-
-const SkeletonLoader = ({ viewMode }: { viewMode: "grid" | "list" }) => {
-  if (viewMode === "list") {
-    return (
-      <div className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#2B2D31] shadow-sm overflow-hidden animate-pulse">
-        {[...Array(8)].map((_, i) => (
-          <div key={i} className="flex md:grid md:grid-cols-[56px_280px_minmax(200px,1fr)_160px_120px] items-stretch border-b border-[rgba(255,255,255,0.04)] min-h-[56px] px-4 py-2 gap-4">
-            <div className="hidden md:flex items-center justify-center"><div className="w-8 h-8 rounded-full bg-[#1E1F22]" /></div>
-            <div className="flex flex-col justify-center gap-2"><div className="h-3 w-3/4 bg-[#1E1F22] rounded" /><div className="h-2 w-1/2 bg-[#1E1F22] rounded" /></div>
-            <div className="hidden md:flex items-center"><div className="h-2 w-full bg-[#1E1F22] rounded" /></div>
-            <div className="hidden md:flex items-center justify-center"><div className="h-2 w-24 bg-[#1E1F22] rounded" /></div>
-            <div className="hidden md:flex items-center justify-end"><div className="h-3 w-16 bg-[#1E1F22] rounded" /></div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="grid gap-3 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 155px), 1fr))" }}>
-      {[...Array(12)].map((_, i) => (
-        <div key={i} className="flex flex-col h-[260px] rounded-[8px] bg-[#2B2D31] border border-[rgba(255,255,255,0.04)] overflow-hidden animate-pulse">
-          <div className="w-full aspect-square bg-[#1E1F22]" />
-          <div className="p-3 md:p-4 flex flex-col gap-2 flex-1">
-            <div className="h-3.5 bg-[#1E1F22] rounded w-3/4" />
-            <div className="h-2.5 bg-[#1E1F22] rounded w-1/2" />
-            <div className="mt-auto pt-3 border-t border-[rgba(255,255,255,0.04)]">
-               <div className="h-5 bg-[#1E1F22] rounded w-full" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 export const MainCanvas = memo(function MainCanvas({
   activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet, scrollToSection,
@@ -84,11 +38,10 @@ export const MainCanvas = memo(function MainCanvas({
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
-  // FIXED: Programmatic sub-tier scroll handler with skip guard to prevent reset collision
   useEffect(() => {
     if (!scrollToSection) return;
     
-    skipNextResetRef.current = true; // Guard against scroll reset on tab change
+    skipNextResetRef.current = true;
     setSearchQuery("");
     setStatusFilter("all");
     setSortMode("value-desc"); 
@@ -123,9 +76,8 @@ export const MainCanvas = memo(function MainCanvas({
 
     const raf = requestAnimationFrame(tryScroll);
     return () => cancelAnimationFrame(raf);
-  }, [scrollToSection]);
+  }, [scrollToSection, setActiveTierFilter, setSearchQuery]);
 
-  // FIXED: Respect the skip flag so sidebar programmatic jumps stay locked on target
   useEffect(() => {
     if (scrollToSection) return;
     if (skipNextResetRef.current) {
@@ -173,7 +125,7 @@ export const MainCanvas = memo(function MainCanvas({
   const filteredAllUnits = useMemo(() => {
     const rawFiltered = ALL_UNITS.filter(u => {
       const q = deferredSearchQuery.toLowerCase();
-      const matchesSearch = deferredSearchQuery === "" || (u.name?.toLowerCase() || "").includes(q) || (u.subtitle?.toLowerCase() || "").includes(q);
+      const matchesSearch = deferredSearchQuery === "" || (u.name?.toLowerCase() || "").includes(q) || (u.subtitle?.toLowerCase() || "").includes(q) || (u.aliases && u.aliases.some(a => a.toLowerCase().includes(q)));
       const matchesTier = deferredSearchQuery !== "" || activeTierFilter === "All" || getTier(u) === activeTierFilter;
       return matchesSearch && matchesTier;
     });
@@ -196,45 +148,19 @@ export const MainCanvas = memo(function MainCanvas({
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
       `}</style>
 
-      <div className="flex-shrink-0 flex flex-col lg:flex-row lg:items-center justify-between px-3 md:px-5 py-3 shadow-sm z-40 relative gap-3 bg-[#2B2D31] border-b border-[rgba(0,0,0,0.22)]">
-        <div className="flex flex-nowrap lg:flex-wrap gap-1.5 overflow-x-auto hide-scrollbar pb-0">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setActiveTierFilter(f)}
-              className="flex-shrink-0 px-3 py-1 rounded-[4px] text-[11px] md:text-[12px] font-bold transition-all duration-300 ease-out hover:-translate-y-0.5"
-              style={
-                activeTierFilter === f && !deferredSearchQuery
-                  ? { background: "#5865F2", color: "#fff", boxShadow: "0 4px 12px rgba(88,101,242,0.3)" }
-                  : { background: "rgba(255,255,255,0.04)", color: "#949BA4", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }
-              }
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 md:gap-3 w-full lg:w-auto flex-wrap relative z-50">
-          {hasFiltersApplied && (
-            <button 
-              onClick={handleResetFilters} 
-              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] text-[11px] font-bold text-[#ed4245] bg-[rgba(237,66,69,0.1)] hover:bg-[#ed4245] hover:text-white transition-colors animate-fade-in"
-              title="Reset Filters"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Reset Filters</span>
-            </button>
-          )}
-
-          <CustomDropdown icon={Filter} value={statusFilter} options={FILTER_OPTIONS} onChange={setStatusFilter} defaultLabel="All Statuses" />
-          <CustomDropdown icon={ArrowUpDown} value={sortMode} options={SORT_OPTIONS} onChange={setSortMode} />
-          <div className="hidden md:block w-px h-4 mx-0 md:mx-1 flex-shrink-0" style={{ background: "rgba(255,255,255,0.08)" }} />
-          <div className="flex bg-[#1E1F22] rounded-[4px] p-[2px] border border-[rgba(255,255,255,0.04)] flex-shrink-0 ml-auto md:ml-0">
-            <button onClick={() => setViewMode("grid")} className={`p-1.5 rounded-[3px] transition-all duration-300 ease-out ${viewMode === "grid" ? "bg-[#4e5058] text-white shadow-sm" : "text-[#80848E] hover:text-[#DBDEE1]"}`} title="Grid View"><LayoutGrid className="w-4 h-4" /></button>
-            <button onClick={() => setViewMode("list")} className={`p-1.5 rounded-[3px] transition-all duration-300 ease-out ${viewMode === "list" ? "bg-[#4e5058] text-white shadow-sm" : "text-[#80848E] hover:text-[#DBDEE1]"}`} title="List View"><List className="w-4 h-4" /></button>
-          </div>
-        </div>
-      </div>
+      <CanvasControls 
+        activeTierFilter={activeTierFilter}
+        setActiveTierFilter={setActiveTierFilter}
+        deferredSearchQuery={deferredSearchQuery}
+        hasFiltersApplied={hasFiltersApplied}
+        handleResetFilters={handleResetFilters}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        sortMode={sortMode}
+        setSortMode={setSortMode}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+      />
 
       <div 
         id="main-scroll-container"
@@ -278,7 +204,7 @@ export const MainCanvas = memo(function MainCanvas({
                <div className={STICKY_HEADER_CLASS}>
                   <TierBanner tier={tier} />
                </div>
-               <SkeletonLoader viewMode={viewMode} />
+               <CanvasSkeleton viewMode={viewMode} />
             </div>
           ) : deferredSearchQuery ? (
              <div className="flex flex-col gap-4 mx-2 md:mx-0">

@@ -10,10 +10,11 @@ export function LazyRender({
   forceRender?: boolean 
 }) {
   const [isRendered, setIsRendered] = useState(false);
+  const [actualHeight, setActualHeight] = useState<string | number>(placeholderHeight);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // FIXED: Instantly force-render if targeted by sidebar navigation
+    // Instantly force-render if targeted by sidebar navigation
     if (forceRender) {
       startTransition(() => setIsRendered(true));
       return;
@@ -21,10 +22,15 @@ export function LazyRender({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !isRendered) {
-          startTransition(() => {
-            setIsRendered(true);
-          });
+        if (entry.isIntersecting) {
+          startTransition(() => setIsRendered(true));
+        } else {
+          // Capture exact height before unmounting to prevent scrollbar jumping
+          if (ref.current && ref.current.getBoundingClientRect().height > 0) {
+            setActualHeight(ref.current.getBoundingClientRect().height);
+          }
+          // Unmount the heavy DOM nodes when 1.5 screens away
+          startTransition(() => setIsRendered(false));
         }
       },
       { rootMargin: "1500px 0px" } 
@@ -35,10 +41,10 @@ export function LazyRender({
     }
 
     return () => observer.disconnect();
-  }, [isRendered, forceRender]);
+  }, [forceRender]);
 
   return (
-    <div ref={ref} style={{ minHeight: isRendered ? "auto" : placeholderHeight }}>
+    <div ref={ref} style={{ minHeight: isRendered ? "auto" : actualHeight }}>
       {isRendered ? children : null}
     </div>
   );

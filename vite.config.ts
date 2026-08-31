@@ -2,6 +2,12 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { VitePWA } from "vite-plugin-pwa";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Required to safely resolve paths in an ES Module environment ("type": "module" in package.json)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig({
   plugins: [
@@ -13,14 +19,14 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            // Intercepts all ASTD Wikia images and caches them locally
-            urlPattern: /^https:\/\/static\.wikia\.nocookie\.net\/.*/i,
+            // Intercepts both direct Wikia images and the wsrv.nl proxy cache
+            urlPattern: /^https:\/\/(wsrv\.nl|static\.wikia\.nocookie\.net)\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'astd-unit-images',
               expiration: {
                 maxEntries: 400,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // Caches for 30 days
+                maxAgeSeconds: 60 * 60 * 24 * 30 
               },
               cacheableResponse: {
                 statuses: [0, 200]
@@ -39,6 +45,11 @@ export default defineConfig({
       }
     })
   ],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
   build: {
     target: "esnext",
     minify: "esbuild",

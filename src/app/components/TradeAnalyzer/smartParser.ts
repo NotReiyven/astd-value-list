@@ -7,25 +7,28 @@ const getEditDistance = (a: string, b: string): number => {
     if (lenB === 0) return lenA;
     if (lenA >= 50 || lenB >= 50) return 99;
 
-    const matrix = Array.from({ length: lenA + 1 }, () => new Array(lenB + 1).fill(0));
+    // Use highly-efficient typed 1D arrays instead of memory-heavy 2D arrays
+    let prevRow = new Uint8Array(lenB + 1);
+    let currRow = new Uint8Array(lenB + 1);
 
-    for (let i = 0; i <= lenA; i++) matrix[i][0] = i;
-    for (let j = 0; j <= lenB; j++) matrix[0][j] = j;
+    for (let j = 0; j <= lenB; j++) prevRow[j] = j;
 
     for (let i = 1; i <= lenA; i++) {
+        currRow[0] = i;
         for (let j = 1; j <= lenB; j++) {
             const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-            matrix[i][j] = Math.min(
-                matrix[i - 1][j] + 1,      
-                matrix[i][j - 1] + 1,      
-                matrix[i - 1][j - 1] + cost 
+            currRow[j] = Math.min(
+                currRow[j - 1] + 1,       // Insertion
+                prevRow[j] + 1,           // Deletion
+                prevRow[j - 1] + cost     // Substitution
             );
-            if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-                matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
-            }
         }
+        // Swap rows without reallocating memory
+        const temp = prevRow;
+        prevRow = currRow;
+        currRow = temp;
     }
-    return matrix[lenA][lenB];
+    return prevRow[lenB];
 };
 
 type LexiconEntry = { key: string; units: MasterUnit[]; type: "exact" | "alias" | "acronym" };

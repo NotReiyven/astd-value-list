@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { get, set } from 'idb-keyval';
 import { MasterUnit } from '../types';
 import { ALL_UNITS as LOCAL_FALLBACK_UNITS } from '../data/units';
+import { getObtainability } from '../data/helpers';
 
 type UnitContextType = {
   units: MasterUnit[];
@@ -9,11 +11,12 @@ type UnitContextType = {
   sheetTitle: string;
   lastUpdated: string;
   isLoading: boolean;
-  isSyncing: boolean; // Added to quietly track background revalidation
+  isSyncing: boolean; 
   isError: boolean;
 };
 
-const CACHE_VERSION = "astd_cache_v2"; // Bump this whenever data structures change to force clean syncs
+// Bumped to v3 for the IndexedDB migration
+const CACHE_VERSION = "astd_cache_v3"; 
 
 const UnitContext = createContext<UnitContextType>({
   units: LOCAL_FALLBACK_UNITS,
@@ -27,61 +30,82 @@ const UnitContext = createContext<UnitContextType>({
 });
 
 export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
-  // Check cache version validity on boot
-  const isCacheValid = () => {
-    try {
-      return localStorage.getItem('astd_cache_version') === CACHE_VERSION;
-    } catch {
-      return false;
-    }
-  };
-
-  const [units, setUnits] = useState<MasterUnit[]>(() => {
-    try { 
-      if (!isCacheValid()) return LOCAL_FALLBACK_UNITS;
-      const c = localStorage.getItem('astd_units_cache'); 
-      return c ? JSON.parse(c) : LOCAL_FALLBACK_UNITS; 
-    } catch { 
-      return LOCAL_FALLBACK_UNITS; 
-    }
-  });
-
-  const [changelog, setChangelog] = useState<string[]>(() => {
-    try { const c = localStorage.getItem('astd_changelog_cache'); return c ? JSON.parse(c) : []; } catch { return []; }
-  });
+  // Initialize with fallbacks; we will quickly overwrite these via IDB
+  const [units, setUnits] = useState<MasterUnit[]>(LOCAL_FALLBACK_UNITS);
+  const [changelog, setChangelog] = useState<string[]>([]);
+  const [notices, setNotices] = useState<any[]>([]);
   
-  const [notices, setNotices] = useState<any[]>(() => {
-    try { const c = localStorage.getItem('astd_notices_cache'); return c ? JSON.parse(c) : []; } catch { return []; }
-  });
-  
+  // Lightweight scalar values can still safely use synchronous localStorage
   const [sheetTitle, setSheetTitle] = useState(() => localStorage.getItem('astd_title_cache') || "ASTD Official Value List");
   const [lastUpdated, setLastUpdated] = useState(() => localStorage.getItem('astd_date_cache') || new Date().toISOString());
   
-  // If cache is invalid or missing, force full loading state
-  const [isLoading, setIsLoading] = useState(!isCacheValid() || !localStorage.getItem('astd_units_cache'));
+  const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    const fetchLiveUnits = async () => {
-      // If we already have a valid cache, run sync quietly in the background (Stale-While-Revalidate)
-      if (!isLoading) {
+    let mounted = true; // Guard to prevent state updates if the component unmounts
+
+    const initCacheAndFetch = async () => {
+      let hasValidCache = false;
+      
+      try {
+        const cacheVersion = localStorage.getItem('astd_cache_version');
+        if (cacheVersion === CACHE_VERSION) {
+          // Read heavy payloads from IndexedDB in parallel
+          const [cachedUnits, cachedChangelog, cachedNotices] = await Promise.all([
+            get('astd_units_cache'),
+            get('astd_changelog_cache'),
+            get('astd_notices_cache')
+          ]);
+
+          if (cachedUnits && mounted) {
+            setUnits(cachedUnits);
+            hasValidCache = true;
+          }
+          if (cachedChangelog && mounted) setChangelog(cachedChangelog);
+          if (cachedNotices && mounted) setNotices(cachedNotices);
+        }
+      } catch (e) {
+        console.warn("Failed to read from IndexedDB", e);
+      }
+
+      if (!mounted) return;
+
+      // If a valid cache exists, drop the loading screen and show the background sync spinner
+      if (hasValidCache) {
+        setIsLoading(false);
         setIsSyncing(true);
       }
 
+      // Fetch live data from the Netlify Serverless Function
       try {
         const res = await fetch('/.netlify/functions/syncSheet');
         if (!res.ok) throw new Error('API Response not OK');
         
         const data = await res.json();
+        if (!mounted) return;
         
-        if (data.sheetTitle) { setSheetTitle(data.sheetTitle); localStorage.setItem('astd_title_cache', data.sheetTitle); }
-        if (data.lastUpdated) { setLastUpdated(data.lastUpdated); localStorage.setItem('astd_date_cache', data.lastUpdated); }
+        if (data.sheetTitle) { 
+          setSheetTitle(data.sheetTitle); 
+          localStorage.setItem('astd_title_cache', data.sheetTitle); 
+        }
+        if (data.lastUpdated) { 
+          setLastUpdated(data.lastUpdated); 
+          localStorage.setItem('astd_date_cache', data.lastUpdated); 
+        }
         
-        if (data.changelog) { setChangelog(data.changelog); localStorage.setItem('astd_changelog_cache', JSON.stringify(data.changelog)); }
-        if (data.notices) { setNotices(data.notices); localStorage.setItem('astd_notices_cache', JSON.stringify(data.notices)); }
+        // Save to state and write back to IndexedDB
+        if (data.changelog) { 
+          setChangelog(data.changelog); 
+          await set('astd_changelog_cache', data.changelog); 
+        }
+        if (data.notices) { 
+          setNotices(data.notices); 
+          await set('astd_notices_cache', data.notices); 
+        }
 
-        if (data && data.units && data.units.length > 0) {
+        if (data?.units?.length > 0) {
           const mergedUnits = data.units.map((apiUnit: MasterUnit) => {
             const apiCleanName = apiUnit.name.toLowerCase().replace(/[^a-z0-9]/g, "");
 
@@ -99,33 +123,38 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
             return {
               ...apiUnit,
               imageUrl: localMatch?.imageUrl || apiUnit.imageUrl || "",
-              aliases: localMatch?.aliases || apiUnit.aliases || []
+              aliases: localMatch?.aliases || apiUnit.aliases || [],
+              obtainability: getObtainability(apiUnit) // Cached directly to the object here
             };
           });
           
-          // Strict deduplication map
+          // Strict deduplication
           const uniqueUnitsMap = new Map<string, MasterUnit>();
           mergedUnits.forEach((u: MasterUnit) => uniqueUnitsMap.set(u.id, u));
           const finalUniqueUnits = Array.from(uniqueUnitsMap.values());
 
           setUnits(finalUniqueUnits);
           
-          // Save to localStorage along with version stamp
-          localStorage.setItem('astd_units_cache', JSON.stringify(finalUniqueUnits));
+          // Save structural clones directly to IndexedDB (No JSON.stringify needed!)
+          await set('astd_units_cache', finalUniqueUnits);
           localStorage.setItem('astd_cache_version', CACHE_VERSION);
         }
       } catch (error) {
         console.error("Live sync failed, falling back to local cache:", error);
-        if (isLoading) {
+        if (!hasValidCache && mounted) {
           setIsError(true);
         }
       } finally {
-        setIsLoading(false);
-        setIsSyncing(false);
+        if (mounted) {
+          setIsLoading(false);
+          setIsSyncing(false);
+        }
       }
     };
 
-    fetchLiveUnits();
+    initCacheAndFetch();
+
+    return () => { mounted = false; };
   }, []);
 
   return (
