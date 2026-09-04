@@ -4,18 +4,16 @@ import { TradeCard, MasterUnit } from "../../../types";
 import { parseSmartTrade, AmbiguousToken, getSlangCache, removeSlang, learnSlang } from "./smartParser";
 import { getProxyImage } from "../../../data";
 import { getAvatarStyle, getInitials } from "./summaryUtils";
+import { useTradeStore } from "../../../store/useTradeStore";
 
 interface SmartParserMenuProps {
   ALL_UNITS: MasterUnit[];
-  giveItems: TradeCard[];
-  getItems: TradeCard[];
-  pinnedIds: Set<string>;
-  onOverwrite: (giveCards: TradeCard[], getCards: TradeCard[]) => void;
-  onAdd: (col: "give" | "get", card: TradeCard) => void;
   onClose: () => void;
 }
 
-export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onOverwrite, onAdd, onClose }: SmartParserMenuProps) {
+export function SmartParserMenu({ ALL_UNITS, onClose }: SmartParserMenuProps) {
+  const { giveItems, getItems, pinnedIds, overwrite, addCard } = useTradeStore();
+  
   const [activeMenuTab, setActiveMenuTab] = useState<"import" | "dictionary">("import");
   const [smartInput, setSmartInput] = useState("");
   const [smartInputError, setSmartInputError] = useState("");
@@ -24,7 +22,6 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
   const [slangDict, setSlangDict] = useState<Record<string, string>>({});
   const [newSlangKey, setNewSlangKey] = useState("");
   
-  // Custom Dropdown State
   const [searchQuery, setSearchQuery] = useState("");
   const [newSlangTargetId, setNewSlangTargetId] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -34,7 +31,6 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
     setSlangDict(getSlangCache());
   }, [activeMenuTab]);
 
-  // Handle clicking outside the custom dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -49,7 +45,6 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
     };
   }, []);
 
-  // Filter units for the custom dropdown
   const filteredUnits = useMemo(() => {
     if (!searchQuery.trim()) return ALL_UNITS.slice(0, 50);
     const q = searchQuery.toLowerCase().trim();
@@ -76,19 +71,20 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
         return Array.from(map.values());
       };
 
-      const pinnedGive = giveItems.filter(i => pinnedIds.has(`give-${i.id}`));
-      const pinnedGet = getItems.filter(i => pinnedIds.has(`get-${i.id}`));
+      const pinnedSet = new Set(pinnedIds);
+      const pinnedGive = giveItems.filter(i => pinnedSet.has(`give-${i.id}`));
+      const pinnedGet = getItems.filter(i => pinnedSet.has(`get-${i.id}`));
 
-      onOverwrite(mergeCards(pinnedGive, result.giveCards), mergeCards(pinnedGet, result.getCards));
+      overwrite(mergeCards(pinnedGive, result.giveCards), mergeCards(pinnedGet, result.getCards));
       setAmbiguousItems(result.ambiguous);
       setSmartInput("");
       if (result.ambiguous.length === 0) onClose();
     }
-  }, [smartInput, giveItems, getItems, pinnedIds, onOverwrite, ALL_UNITS, onClose]);
+  }, [smartInput, giveItems, getItems, pinnedIds, overwrite, ALL_UNITS, onClose]);
 
   const resolveAmbiguity = useCallback((index: number, resolvedUnit: MasterUnit, col: "give" | "get", qty: number) => {
     if (qty > 0) {
-      onAdd(col, {
+      addCard(col, {
           id: resolvedUnit.id, name: resolvedUnit.name, subtitle: resolvedUnit.subtitle,
           value: typeof resolvedUnit.value === "number" ? resolvedUnit.value : 0,
           demand: resolvedUnit.demand, qty
@@ -102,7 +98,7 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
       if (newAmbiguous.length === 0) onClose();
       return newAmbiguous;
     });
-  }, [onAdd, ambiguousItems, onClose]);
+  }, [addCard, ambiguousItems, onClose]);
 
   const handleAddSlang = () => {
     if (!newSlangKey.trim() || !newSlangTargetId) return;
@@ -245,7 +241,7 @@ export function SmartParserMenu({ ALL_UNITS, giveItems, getItems, pinnedIds, onO
                          <div className="p-3 text-center text-[12px] text-[#80848E]">No units found.</div>
                       ) : (
                          filteredUnits.map(u => {
-                             const proxyUrl = getProxyImage(u.imageUrl);
+                             const proxyUrl = getProxyImage(u.id, u.imageUrl);
                              const valText = u.value === "owner" ? "O/C" : (typeof u.value === "number" ? u.value.toLocaleString() : u.valueMin?.toLocaleString() || "0");
                              return (
                                  <button

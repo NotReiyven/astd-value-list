@@ -1,36 +1,22 @@
-import { useState, useRef, memo, useMemo, useEffect } from "react";
+import { useState, useRef, memo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X, ArrowLeft, ArrowRight } from "lucide-react";
 import { PopupUnit, GridUnit, MasterUnit, UnitStatus } from "../../../types";
 import { GRID_STATUS_CFG, getRarityLabel, SUPPLY_SCALE, DEMAND_SCALE, getTier, TIER_CONFIG, getProxyImage } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
-import { LazyRender } from "./LazyRender";
+import { useTradeStore } from "../../../store/useTradeStore";
 
-export const UnitGrid = memo(function UnitGrid({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
-  const chunks = useMemo(() => {
-    const result = [];
-    for (let i = 0; i < units.length; i += 24) {
-      result.push(units.slice(i, i + 24));
-    }
-    return result;
-  }, [units]);
-
+export const UnitGrid = memo(function UnitGrid({ units }: { units: MasterUnit[] }) {
   return (
-    <div className="flex flex-col gap-3 sm:gap-5 w-full">
-      {chunks.map((chunk, idx) => (
-        <LazyRender key={idx} placeholderHeight="540px">
-          <div className="grid gap-3 sm:gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 155px), 1fr))" }}>
-            {chunk.map((unit) => (
-              <TierGridCard key={unit.id} unit={unit} onAddGive={onAddGive} onAddGet={onAddGet} />
-            ))}
-          </div>
-        </LazyRender>
+    <div className="grid gap-3 sm:gap-5 w-full pb-3 sm:pb-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 155px), 1fr))" }}>
+      {units.map((unit) => (
+        <TierGridCard key={unit.id} unit={unit} />
       ))}
     </div>
   );
 });
 
-export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddGet }: { unit: GridUnit; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
+export const TierGridCard = memo(function TierGridCard({ unit }: { unit: GridUnit }) {
   const [hovered, setHovered] = useState(false);
   const [isAdded, setIsAdded] = useState(false); 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -39,6 +25,8 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const scrollDirectionRef = useRef<"horizontal" | "vertical" | null>(null);
+
+  const addCard = useTradeStore(state => state.addCard);
 
   const popupUnit: PopupUnit = {
     id: unit.id, name: unit.name, subtitle: unit.subtitle,
@@ -50,6 +38,12 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
   const triggerAddedGlow = () => {
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 200);
+  };
+
+  const handleAdd = (type: "give" | "get") => {
+    addCard(type, { ...popupUnit, qty: 1 });
+    window.dispatchEvent(new CustomEvent("trade-added", { detail: { name: popupUnit.name, type } }));
+    triggerAddedGlow();
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -83,9 +77,9 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
 
   const onTouchEnd = () => {
     if (swipeOffset > 80) {
-      onAddGive(popupUnit); triggerAddedGlow();
+      handleAdd("give");
     } else if (swipeOffset < -80) {
-      onAddGet(popupUnit); triggerAddedGlow();
+      handleAdd("get");
     }
     setSwipeOffset(0);
     touchStartX.current = null;
@@ -95,7 +89,7 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
 
   const tierKey = getTier(unit as MasterUnit);
   const tierColor = TIER_CONFIG[tierKey]?.badgeColor || "#5865F2";
-  const proxyUrl = getProxyImage(unit.imageUrl);
+  const proxyUrl = getProxyImage(unit.id, unit.imageUrl);
 
   return (
     <div className="relative w-full overflow-hidden rounded-[8px] group" style={{ contentVisibility: "auto", containIntrinsicSize: "260px" }}>
@@ -111,14 +105,12 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
           if (window.innerWidth < 768) {
             setMobileMenuOpen(true); 
           } else {
-            onAddGive(popupUnit);
-            triggerAddedGlow();
+            handleAdd("give");
           }
         }}
         onContextMenu={(e) => { 
           e.preventDefault(); 
-          onAddGet(popupUnit); 
-          triggerAddedGlow(); 
+          handleAdd("get");
         }}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         className="flex flex-col h-full rounded-[8px] overflow-hidden cursor-pointer relative z-10 will-change-transform"
@@ -191,9 +183,9 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
                   onClick={(e) => { 
                     e.stopPropagation(); 
                     if (window.innerWidth < 768) setMobileMenuOpen(true);
-                    else { onAddGive(popupUnit); triggerAddedGlow(); }
+                    else handleAdd("give");
                   }}
-                  onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); onAddGet(popupUnit); triggerAddedGlow(); }}
+                  onContextMenu={(e) => { e.stopPropagation(); e.preventDefault(); handleAdd("get"); }}
                   title="Left Click: Add Give | Right Click: Add Get"
                 >
                   <Plus className="w-3.5 h-3.5 flex-shrink-0" />
@@ -202,8 +194,8 @@ export const TierGridCard = memo(function TierGridCard({ unit, onAddGive, onAddG
 
               {mobileMenuOpen && (
                 <div className="absolute bottom-0 left-0 right-0 flex items-center gap-1.5 z-20 md:hidden bg-[#2B2D31] pb-1 pt-1 animate-fade-in">
-                  <button onClick={(e) => { e.stopPropagation(); onAddGive(popupUnit); setMobileMenuOpen(false); triggerAddedGlow(); }} className="flex-1 bg-[#FAA61A] text-white text-[11px] font-bold h-[26px] rounded-[4px] active:scale-95 shadow-sm">Give</button>
-                  <button onClick={(e) => { e.stopPropagation(); onAddGet(popupUnit); setMobileMenuOpen(false); triggerAddedGlow(); }} className="flex-1 bg-[#5865F2] text-white text-[11px] font-bold h-[26px] rounded-[4px] active:scale-95 shadow-sm">Get</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleAdd("give"); setMobileMenuOpen(false); }} className="flex-1 bg-[#FAA61A] text-white text-[11px] font-bold h-[26px] rounded-[4px] active:scale-95 shadow-sm">Give</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleAdd("get"); setMobileMenuOpen(false); }} className="flex-1 bg-[#5865F2] text-white text-[11px] font-bold h-[26px] rounded-[4px] active:scale-95 shadow-sm">Get</button>
                   <button onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(false); }} className="flex-shrink-0 w-[26px] h-[26px] bg-[rgba(255,255,255,0.06)] text-[#F2F3F5] rounded-[4px] flex items-center justify-center active:scale-95"><X className="w-3.5 h-3.5" /></button>
                 </div>
               )}
@@ -297,7 +289,6 @@ function GridStatItem({ label, value }: { label: string; value: number }) {
   );
 }
 
-// FIXED: Safely interpret Owner's Choice without affecting valid `0` or `1` values
 function GridValueDisplay({ unit }: { unit: GridUnit }) {
   if (unit.value === "owner" || unit.valueDisplay === "Owner's Choice" || unit.valueDisplay === "O/C") {
     return (

@@ -53,7 +53,7 @@ export const ActiveCardRow = memo(function ActiveCardRow({
   const masterData = useMemo(() => units.find(u => u.id === card.id), [units, card.id]);
   
   const dropCfg = masterData?.status ? GRID_STATUS_CFG[masterData.status as keyof typeof GRID_STATUS_CFG] : null;
-  const proxyUrl = getProxyImage(masterData?.imageUrl);
+  const proxyUrl = getProxyImage(card.id, masterData?.imageUrl);
 
   const handleQtyInput = useCallback((newQty: number) => onQtyChange(card.id, Math.min(newQty, 9999)), [card.id, onQtyChange]);
   const handleMinus = useCallback(() => onQtyChange(card.id, Math.max(1, card.qty - 1)), [card.id, card.qty, onQtyChange]);

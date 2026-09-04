@@ -1,4 +1,7 @@
 import { Handler, HandlerResponse } from "@netlify/functions";
+import sanitizeHtml from "sanitize-html";
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
 
 // Strict Interfaces for Google Sheets API
 interface ColorObj {
@@ -66,15 +69,12 @@ function getTagFromColor(colorObj?: ColorObj) {
   return minDistance < 100 ? bestTag : "stable";
 }
 
-// Added CORS and strict headers
 function jsonResponse(
   statusCode: number,
   body: unknown,
   extraHeaders: Record<string, string> = {}
 ): HandlerResponse {
-  // Use explicit domain in production, fallback if unset.
   const allowedOrigin = process.env.URL || "https://astd-value-list.netlify.app";
-  
   return {
     statusCode,
     headers: {
@@ -87,26 +87,49 @@ function jsonResponse(
   };
 }
 
+// Lightweight sanitization wrapper
+function cleanText(input: string | undefined): string {
+  if (!input) return "";
+  return sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} });
+}
+
+let ratelimit: Ratelimit | null = null;
+
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  const redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  ratelimit = new Ratelimit({
+    redis: redis,
+    limiter: Ratelimit.slidingWindow(15, "1 m"),
+  });
+}
+
 export const handler: Handler = async (event, context) => {
-  // Handle Preflight OPTIONS request for CORS
   if (event.httpMethod === "OPTIONS") {
     return jsonResponse(204, "");
   }
 
-  // Block non-GET requests
   if (event.httpMethod !== "GET") {
     return jsonResponse(405, { error: "Method Not Allowed" });
   }
 
-  // CRITICAL FIX: Block all query parameters to prevent Cache-Busting/Quota DoS
   if (event.queryStringParameters && Object.keys(event.queryStringParameters).length > 0) {
     return jsonResponse(400, { error: "Query parameters are not allowed." });
+  }
+
+  if (ratelimit) {
+    const ip = event.headers["x-nf-client-connection-ip"] || "anonymous";
+    const { success } = await ratelimit.limit(`sync_${ip}`);
+    if (!success) {
+      return jsonResponse(429, { error: "Rate limit exceeded. Please try again in a minute." });
+    }
   }
 
   const API_KEY = process.env.GOOGLE_SHEETS_API_KEY;
   const SHEET_ID = process.env.SPREADSHEET_ID;
 
-  // Scrape all core sheets to build the live payload
   const ranges = [
     "S Tier!A:H", "A Tier!A:H", "B Tier!A:H", "C Tier!A:H",
     "Pure Tier!A:H", "Oddities!A:H", "Untiered!A:H",
@@ -136,9 +159,6 @@ export const handler: Handler = async (event, context) => {
       const rowData = sheet.data?.[0]?.rowData;
       if (!rowData) continue;
 
-      // ========================================================
-      // 1. SCRAPE HOME TAB (Patch Notes)
-      // ========================================================
       if (tabName === "Home") {
         let changelogColIdx = -1;
         rowData.forEach((row: RowData) => {
@@ -153,21 +173,18 @@ export const handler: Handler = async (event, context) => {
           }
 
           if (changelogColIdx !== -1) {
-            const text = row.values[changelogColIdx]?.formattedValue?.trim();
+            const text = cleanText(row.values[changelogColIdx]?.formattedValue?.trim());
             if (text && !text.includes("Latest Update Log")) changelog.push(text);
           }
         });
         continue;
       }
 
-      // ========================================================
-      // 2. SCRAPE EXTRA NOTICES TAB
-      // ========================================================
       if (tabName === "Extra Notices") {
         rowData.forEach((row: RowData, idx: number) => {
-          if (idx < 3) return; // Skip title headers
-          const titleRaw = row.values?.[0]?.formattedValue?.trim() || "";
-          const content = row.values?.[1]?.formattedValue?.trim() || "";
+          if (idx < 3) return; 
+          const titleRaw = cleanText(row.values?.[0]?.formattedValue?.trim());
+          const content = cleanText(row.values?.[1]?.formattedValue?.trim());
           if (titleRaw && content) {
             const match = titleRaw.match(/(.+?)(?:\s+(\d{1,2}\/\d{1,2}\/\d{2,4}))?$/);
             notices.push({
@@ -180,9 +197,6 @@ export const handler: Handler = async (event, context) => {
         continue;
       }
 
-      // ========================================================
-      // 3. DYNAMIC TIER PARSING (Handles Missing Columns)
-      // ========================================================
       let tierKey = "S";
       if (tabName.includes("A Tier")) tierKey = "A";
       else if (tabName.includes("B Tier")) tierKey = "B";
@@ -192,8 +206,6 @@ export const handler: Handler = async (event, context) => {
       else if (tabName.includes("Untiered")) tierKey = "Untiered";
 
       let currentSubCategory = tabName, currentSubCategoryRange = "All";
-
-      // Default fallback mapping
       let colMap = { value: 2, rarity: 3, supply: 4, demand: 5, notices: 6, statusTxt: 7 };
 
       for (let i = 0; i < rowData.length; i++) {
@@ -201,14 +213,13 @@ export const handler: Handler = async (event, context) => {
         if (!row) continue;
 
         const getCellStr = (idx: number) => row[idx]?.formattedValue?.toString().trim() || "";
-        const colB = getCellStr(1);
+        const colB = cleanText(getCellStr(1));
         if (!colB) continue;
 
-        const rawRowStrs = row.map((c: CellData | undefined) => c?.formattedValue?.toString().toLowerCase().trim() || "");
+        const rawRowStrs = row.map((c: CellData | undefined) => cleanText(c?.formattedValue?.toString().toLowerCase().trim()));
         const hasValue = rawRowStrs.some((s: string) => s.includes("value"));
         const hasNotices = rawRowStrs.some((s: string) => s.includes("notices"));
 
-        // If row is a subcategory header, remap the column indexes dynamically!
         if (hasValue || (hasNotices && !colB.includes("/"))) {
           currentSubCategory = colB;
           colMap = { value: -1, rarity: -1, supply: -1, demand: -1, notices: -1, statusTxt: -1 };
@@ -224,16 +235,14 @@ export const handler: Handler = async (event, context) => {
             else if (headerText.includes("demand")) colMap.demand = j;
             else if (headerText.includes("notices")) {
               colMap.notices = j;
-              colMap.statusTxt = j + 1; // Explicit text status is usually right after notices
+              colMap.statusTxt = j + 1; 
             }
           }
           continue;
         }
 
-        // Skip random spreadsheet notes
         if (!colB.includes("/") && colMap.value !== -1 && !getCellStr(colMap.value)) continue;
 
-        // Split unit name and subtitle
         let name = colB, subtitle = "";
         if (colB.includes("/")) {
           const split = colB.split("/");
@@ -243,30 +252,24 @@ export const handler: Handler = async (event, context) => {
           name = split[0].trim(); subtitle = split[1] ? split[1].trim() : "";
         }
 
-        // ========================================================================
-        // CRITICAL FIX: Distinguish Pure variants and fix general name collisions
-        // ========================================================================
         if (tierKey === "Pure" && !name.toLowerCase().includes("(pure)")) {
           name = `${name} (Pure)`;
         }
 
         let unitId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
-        // Edge case: Handle specific name collisions in the game (Ice Dragon)
         if (unitId === "ice-dragon" && subtitle.toLowerCase().includes("eis shenron")) {
           unitId = "eis";
         }
-        // ========================================================================
 
-        // Parse numerical values & ranges
-        const rawValue = colMap.value !== -1 ? getCellStr(colMap.value).toLowerCase() : "";
+        const rawValue = colMap.value !== -1 ? cleanText(getCellStr(colMap.value).toLowerCase()) : "";
         let numericValue: number | "owner" | "range" = 0, valueMin: number | undefined = undefined, valueDisplay: string | undefined = undefined;
 
         if (rawValue.includes("owner") || rawValue.includes("o/c")) {
           numericValue = "owner"; valueDisplay = "Owner's Choice";
         } else if (rawValue.includes("-") || rawValue.includes("k") || rawValue.includes("m") || rawValue.includes("?")) {
           numericValue = "range";
-          valueDisplay = rawValue ? getCellStr(colMap.value) : "0";
+          valueDisplay = rawValue ? cleanText(getCellStr(colMap.value)) : "0";
           const firstPart = rawValue.split("-")[0].replace("?", "0").trim();
           let multiplier = 1;
           if (firstPart.includes("k")) multiplier = 1000;
@@ -276,24 +279,22 @@ export const handler: Handler = async (event, context) => {
           numericValue = parseInt(rawValue.replace(/[^0-9]/g, "")) || 0;
         }
 
-        // Determine Status Color
         const nameColor = row[1]?.effectiveFormat?.backgroundColor;
         const valColor = colMap.value !== -1 ? row[colMap.value]?.effectiveFormat?.backgroundColor : undefined;
         let parsedTag = getTagFromColor(nameColor);
         if (parsedTag === "stable") parsedTag = getTagFromColor(valColor);
 
-        // Allow explicitly written statuses to override background colors
-        const rawStatusText = colMap.statusTxt !== -1 ? getCellStr(colMap.statusTxt).toLowerCase().trim().replace(" ", "-") : "";
+        const rawStatusText = colMap.statusTxt !== -1 ? cleanText(getCellStr(colMap.statusTxt).toLowerCase().trim().replace(" ", "-")) : "";
         const validStatuses = ["stable", "unstable", "rising", "dropping", "inflated", "deflated", "varies", "maximum", "hyped", "gatekept", "black-marketed"];
         const unitStatus = validStatuses.includes(rawStatusText) ? rawStatusText : parsedTag;
 
         parsedUnits.push({
-          id: unitId, // Replaced explicit inline replacement with the collision-safe ID
+          id: unitId,
           name, subtitle, value: numericValue, valueMin, valueDisplay,
           rarity: colMap.rarity !== -1 ? parseFloat(getCellStr(colMap.rarity)) || 0 : 0,
           supply: colMap.supply !== -1 ? parseFloat(getCellStr(colMap.supply)) || 0 : 0,
           demand: colMap.demand !== -1 ? parseFloat(getCellStr(colMap.demand)) || 0 : 0,
-          notice: colMap.notices !== -1 ? getCellStr(colMap.notices) : "",
+          notice: colMap.notices !== -1 ? cleanText(getCellStr(colMap.notices)) : "",
           status: unitStatus, tier: tierKey, subCategory: currentSubCategory, subCategoryRange: currentSubCategoryRange
         });
       }

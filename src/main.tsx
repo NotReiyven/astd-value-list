@@ -28,10 +28,11 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   handleReset = () => {
-    // Confirm before wiping user data to prevent accidental data loss
     if (window.confirm("This will clear all your saved trade data and reload the app. Are you sure you want to proceed?")) {
-      localStorage.removeItem("astd_give");
-      localStorage.removeItem("astd_get");
+      localStorage.removeItem("astd_trade_storage"); // Zustand global state
+      localStorage.removeItem("astd_cache_version"); // IndexedDB version check
+      localStorage.removeItem("astd_give");          // Legacy state
+      localStorage.removeItem("astd_get");           // Legacy state
       window.location.reload();
     }
   }

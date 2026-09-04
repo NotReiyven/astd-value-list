@@ -1,9 +1,9 @@
-import { memo, useState, useRef, useMemo } from "react";
+import { memo, useState, useRef } from "react";
 import { Plus, X, ArrowRight, ArrowLeft } from "lucide-react";
 import { PopupUnit, MasterUnit } from "../../../types";
 import { GRID_STATUS_CFG, getTier, TIER_CONFIG, getProxyImage } from "../../../data";
 import { getAvatarStyle, getInitials } from "../TradeAnalyzer/summaryUtils"; 
-import { LazyRender } from "./LazyRender";
+import { useTradeStore } from "../../../store/useTradeStore";
 
 export const getStatColor = (label: string, value: number) => {
   if (label === "R") {
@@ -27,7 +27,34 @@ export const getStatColor = (label: string, value: number) => {
   return "#DBDEE1";
 };
 
-const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGet }: { unit: MasterUnit; isLast: boolean; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
+export const UnitListTable = memo(function UnitListTable({ units }: { units: MasterUnit[] }) {
+  return (
+    <div className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#2B2D31] shadow-sm pb-2 md:pb-0 overflow-hidden">
+      <div className="flex flex-col w-full">
+        <ListHeaderRow />
+        <div className="flex flex-col bg-[#2B2D31]">
+          {units.map((unit, i) => (
+            <UnitListRow key={unit.id} unit={unit} isLast={i === units.length - 1} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export const ListHeaderRow = memo(function ListHeaderRow() {
+  return (
+    <div className="hidden md:grid grid-cols-[56px_280px_minmax(200px,1fr)_160px_120px] items-center bg-[#1E1F22] text-[#949BA4] text-[10px] font-bold uppercase tracking-wider select-none border border-b-0 border-[rgba(255,255,255,0.08)] rounded-t-[8px]">
+      <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Icon</div>
+      <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Unit Information</div>
+      <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Notes</div>
+      <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center justify-center">Stats (R/S/D)</div>
+      <div className="px-4 py-3 h-full flex items-center justify-end">Value</div>
+    </div>
+  );
+});
+
+export const UnitListRow = memo(function UnitListRow({ unit, isLast }: { unit: MasterUnit; isLast: boolean }) {
   const [hovered, setHovered] = useState(false);
   const [isAdded, setIsAdded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -37,16 +64,24 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
   const touchStartY = useRef<number | null>(null);
   const scrollDirectionRef = useRef<"horizontal" | "vertical" | null>(null);
   
+  const addCard = useTradeStore(state => state.addCard);
+
   const popupUnit: PopupUnit = { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: typeof unit.value === "number" ? unit.value : 0, demand: unit.demand };
   const sCfg = unit.status ? GRID_STATUS_CFG[unit.status] : null;
   const tierKey = getTier(unit);
   const tierColor = TIER_CONFIG[tierKey]?.badgeColor || "#5865F2";
-  const proxyUrl = getProxyImage(unit.imageUrl);
+  const proxyUrl = getProxyImage(unit.id, unit.imageUrl);
   const obtainability = unit.obtainability || "UNOB";
 
   const triggerAddedGlow = () => {
     setIsAdded(true);
     setTimeout(() => setIsAdded(false), 200);
+  };
+
+  const handleAdd = (type: "give" | "get") => {
+    addCard(type, { ...popupUnit, qty: 1 });
+    window.dispatchEvent(new CustomEvent("trade-added", { detail: { name: popupUnit.name, type } }));
+    triggerAddedGlow();
   };
 
   const handleDragStart = (e: React.DragEvent) => {
@@ -58,8 +93,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
     if (window.innerWidth < 768) {
       setMobileMenuOpen(true);
     } else {
-      onAddGive(popupUnit);
-      triggerAddedGlow();
+      handleAdd("give");
     }
   };
 
@@ -89,9 +123,9 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
 
   const onTouchEnd = () => {
     if (swipeOffset > 80) {
-      onAddGive(popupUnit); triggerAddedGlow();
+      handleAdd("give");
     } else if (swipeOffset < -80) {
-      onAddGet(popupUnit); triggerAddedGlow();
+      handleAdd("get");
     }
     setSwipeOffset(0);
     touchStartX.current = null;
@@ -99,7 +133,6 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
     scrollDirectionRef.current = null;
   };
 
-  // FIXED: Standardized Owner's Choice display rule
   const valDisplay = unit.value === "owner" || unit.valueDisplay === "Owner's Choice" || unit.valueDisplay === "O/C"
     ? <span className="text-[13px] md:text-[14px] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Owner's Choice</span>
     : unit.valueDisplay 
@@ -107,7 +140,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
       : <span className="text-[14px] md:text-[15px] font-bold tracking-tight text-[#F2F3F5] font-mono">{(unit.value as number).toLocaleString()}</span>;
 
   return (
-    <div className="relative group w-full overflow-hidden" style={{ borderBottom: !isLast ? "1px solid rgba(255,255,255,0.04)" : "none", contentVisibility: "auto", containIntrinsicSize: "56px" }}>
+    <div className={`relative group w-full overflow-hidden bg-[#2B2D31] border-x border-[rgba(255,255,255,0.06)] ${isLast ? 'border-b rounded-b-[8px]' : 'border-b border-b-[rgba(255,255,255,0.04)]'}`} style={{ contentVisibility: "auto", containIntrinsicSize: "56px" }}>
       <div className={`absolute inset-0 flex items-center px-5 font-bold transition-colors duration-200 z-0 ${swipeOffset > 0 ? 'bg-[#FAA61A] justify-start text-white' : swipeOffset < 0 ? 'bg-[#5865F2] justify-end text-white' : 'bg-transparent'}`}>
          {swipeOffset > 0 && <><ArrowRight className="w-4 h-4 mr-2" /> Add Give</>}
          {swipeOffset < 0 && <><ArrowLeft className="w-4 h-4 ml-2" /> Add Get</>}
@@ -117,7 +150,7 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
         draggable
         onDragStart={handleDragStart}
         onClick={handleCardClick}
-        onContextMenu={(e) => { e.preventDefault(); onAddGet(popupUnit); triggerAddedGlow(); }}
+        onContextMenu={(e) => { e.preventDefault(); handleAdd("get"); }}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -198,47 +231,11 @@ const UnitListRow = memo(function UnitListRow({ unit, isLast, onAddGive, onAddGe
 
           {mobileMenuOpen && (
             <div className="absolute inset-0 flex items-center gap-2 bg-[#2B2D31] z-20 md:hidden animate-fade-in pl-1">
-              <button onClick={(e) => { e.stopPropagation(); onAddGive(popupUnit); setMobileMenuOpen(false); triggerAddedGlow(); }} className="flex-1 bg-[#FAA61A] text-white text-[12px] font-bold h-[28px] rounded-[4px] active:scale-95 shadow-sm">Give</button>
-              <button onClick={(e) => { e.stopPropagation(); onAddGet(popupUnit); setMobileMenuOpen(false); triggerAddedGlow(); }} className="flex-1 bg-[#5865F2] text-white text-[12px] font-bold h-[28px] rounded-[4px] active:scale-95 shadow-sm">Get</button>
+              <button onClick={(e) => { e.stopPropagation(); handleAdd("give"); setMobileMenuOpen(false); }} className="flex-1 bg-[#FAA61A] text-white text-[12px] font-bold h-[28px] rounded-[4px] active:scale-95 shadow-sm">Give</button>
+              <button onClick={(e) => { e.stopPropagation(); handleAdd("get"); setMobileMenuOpen(false); }} className="flex-1 bg-[#5865F2] text-white text-[12px] font-bold h-[28px] rounded-[4px] active:scale-95 shadow-sm">Get</button>
               <button onClick={(e) => { e.stopPropagation(); setMobileMenuOpen(false); }} className="flex-shrink-0 w-[28px] h-[28px] bg-[rgba(255,255,255,0.06)] text-[#F2F3F5] rounded-[4px] flex items-center justify-center active:scale-95"><X className="w-4 h-4" /></button>
             </div>
           )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-export const UnitListTable = memo(function UnitListTable({ units, onAddGive, onAddGet }: { units: MasterUnit[]; onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void; }) {
-  const chunks = useMemo(() => {
-    const result = [];
-    for (let i = 0; i < units.length; i += 30) {
-      result.push(units.slice(i, i + 30));
-    }
-    return result;
-  }, [units]);
-
-  return (
-    <div className="w-full rounded-[8px] border border-[rgba(255,255,255,0.06)] bg-[#2B2D31] shadow-sm pb-2 md:pb-0 overflow-hidden">
-      <div className="flex flex-col w-full">
-        <div className="hidden md:grid grid-cols-[56px_280px_minmax(200px,1fr)_160px_120px] items-center border-b border-[rgba(255,255,255,0.08)] bg-[#1E1F22] text-[#949BA4] text-[10px] font-bold uppercase tracking-wider select-none">
-          <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Icon</div>
-          <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Unit Information</div>
-          <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center">Notes</div>
-          <div className="px-4 py-3 border-r border-[rgba(255,255,255,0.04)] h-full flex items-center justify-center">Stats (R/S/D)</div>
-          <div className="px-4 py-3 h-full flex items-center justify-end">Value</div>
-        </div>
-        
-        <div className="flex flex-col bg-[#2B2D31]">
-          {chunks.map((chunk, idx) => (
-            <LazyRender key={idx} placeholderHeight="1680px">
-              <div className="flex flex-col w-full">
-                {chunk.map((unit, i) => (
-                  <UnitListRow key={unit.id} unit={unit} isLast={idx === chunks.length - 1 && i === chunk.length - 1} onAddGive={onAddGive} onAddGet={onAddGet} />
-                ))}
-              </div>
-            </LazyRender>
-          ))}
         </div>
       </div>
     </div>

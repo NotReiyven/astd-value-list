@@ -1,17 +1,9 @@
-import { useMemo } from "react";
 import { MasterUnit } from "../../../types";
-import { UnitGrid } from "./UnitGrid";
-import { UnitListTable } from "./UnitListTable";
 
-// DYNAMIC MASK: Safely catch text-based O/C inputs without breaking legitimate 0 or 1 values
 export function getSortValue(u: MasterUnit): number {
   const disp = u.valueDisplay?.toLowerCase() || "";
-  if (u.value === "owner" || disp.includes("owner's choice") || disp.includes("o/c")) {
-    return Infinity;
-  }
-  if (u.value === "range" && typeof u.valueMin === "number") {
-    return u.valueMin;
-  }
+  if (u.value === "owner" || disp.includes("owner's choice") || disp.includes("o/c")) return Infinity;
+  if (u.value === "range" && typeof u.valueMin === "number") return u.valueMin;
   return typeof u.value === "number" ? u.value : 0;
 }
 
@@ -23,8 +15,6 @@ export function processUnits(units: MasterUnit[], sortMode: string, statusFilter
     const valA = getSortValue(a);
     const valB = getSortValue(b);
 
-    // FIXED: Infinity - Infinity returns NaN, which breaks JavaScript sorting arrays.
-    // We explicitly catch infinite ties and alphabetize them safely.
     if (sortMode === "value-desc") {
       if (valA === Infinity && valB === Infinity) return a.name.localeCompare(b.name);
       return valB - valA;
@@ -54,6 +44,64 @@ export function processUnits(units: MasterUnit[], sortMode: string, statusFilter
   return processed;
 }
 
+export function buildSections(units: MasterUnit[], sortMode: string, statusFilter: string, tier: string) {
+  const isValueSort = sortMode === "value-desc" || sortMode === "value-asc";
+  const sectionsMap = new Map<string, { label: string; range: string; units: MasterUnit[] }>();
+  const isStandardTier = ["S", "A", "B", "C"].includes(tier);
+  
+  let topCatLabel = "";
+  let topCatRange = "";
+  if (isStandardTier) {
+    units.forEach((u) => {
+      if (u.subCategory?.toLowerCase().includes("top")) {
+        topCatLabel = u.subCategory;
+        topCatRange = u.subCategoryRange || "N/A";
+      }
+    });
+  }
+
+  units.forEach((u) => {
+    let cat = u.subCategory || "Uncategorized";
+    let range = u.subCategoryRange || "N/A";
+
+    if (isValueSort && isStandardTier && getSortValue(u) === Infinity && topCatLabel) {
+      cat = topCatLabel;
+      range = topCatRange;
+    }
+    
+    if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range, units: [] });
+    sectionsMap.get(cat)!.units.push(u);
+  });
+
+  const mappedSections = Array.from(sectionsMap.values()).map(sec => ({
+    ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
+  })).filter(sec => sec.processedUnits.length > 0);
+
+  if (isValueSort && isStandardTier) {
+    const subCatPriority: Record<string, number> = { "top": 1, "high": 2, "mid": 3, "low": 4 };
+    mappedSections.sort((a, b) => {
+      const getRank = (name: string) => {
+        const lower = name.toLowerCase();
+        for (const key of Object.keys(subCatPriority)) {
+          if (lower.includes(key)) return subCatPriority[key];
+        }
+        return 99;
+      };
+
+      const rankA = getRank(a.label);
+      const rankB = getRank(b.label);
+
+      if (rankA !== rankB) return sortMode === "value-desc" ? rankA - rankB : rankB - rankA;
+
+      const valA = Math.max(...a.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
+      const valB = Math.max(...b.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
+      return sortMode === "value-desc" ? valB - valA : valA - valB;
+    });
+  }
+
+  return mappedSections;
+}
+
 export function TierBanner({ tier }: { tier: { label: string; badgeColor: string } }) {
   return (
     <div className="relative w-full mb-8 overflow-hidden rounded-xl" style={{ background: `linear-gradient(135deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.015) 50%, rgba(0,0,0,0.08) 100%), #2B2D31`, border: "1px solid rgba(255,255,255,0.07)", boxShadow: `0 8px 24px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.035)` }}>
@@ -78,102 +126,6 @@ export function TierSubHeader({ label, valueRange, count }: { label: string; val
       </div>
       <div className="flex-1 h-px bg-[rgba(255,255,255,0.06)]" />
       <span className="text-[10px] font-bold px-1.5 py-[2px] rounded-[4px] bg-[rgba(255,255,255,0.04)] text-[#949BA4]">{count}</span>
-    </div>
-  );
-}
-
-export function DynamicTierSection({ tier, units, viewMode, sortMode, statusFilter, onAddGive, onAddGet }: any) {
-  const isValueSort = sortMode === "value-desc" || sortMode === "value-asc";
-  
-  const sections = useMemo(() => {
-    const sectionsMap = new Map<string, { label: string; range: string; units: MasterUnit[] }>();
-    const isStandardTier = ["S", "A", "B", "C"].includes(tier);
-    
-    // Auto-detect the "Top" category for this specific tier so we can hoist misplaced O/C units into it
-    let topCatLabel = "";
-    let topCatRange = "";
-    if (isStandardTier) {
-      units.forEach((u: MasterUnit) => {
-        if (u.subCategory?.toLowerCase().includes("top")) {
-          topCatLabel = u.subCategory;
-          topCatRange = u.subCategoryRange || "N/A";
-        }
-      });
-    }
-
-    units.forEach((u: MasterUnit) => {
-      let cat = u.subCategory || "Uncategorized";
-      let range = u.subCategoryRange || "N/A";
-
-      // DATA CORRECTION: If a unit is O/C but the spreadsheet trapped it in a low tier,
-      // dynamically intercept it and assign it to the Top tier section so it joins the others.
-      if (isValueSort && isStandardTier && getSortValue(u) === Infinity && topCatLabel) {
-        cat = topCatLabel;
-        range = topCatRange;
-      }
-      
-      if (!sectionsMap.has(cat)) sectionsMap.set(cat, { label: cat, range, units: [] });
-      sectionsMap.get(cat)!.units.push(u);
-    });
-
-    const mappedSections = Array.from(sectionsMap.values()).map(sec => ({
-      ...sec, processedUnits: processUnits(sec.units, sortMode, statusFilter)
-    })).filter(sec => sec.processedUnits.length > 0);
-
-    if (isValueSort && isStandardTier) {
-      const subCatPriority: Record<string, number> = {
-        "top": 1,
-        "high": 2,
-        "mid": 3,
-        "low": 4
-      };
-
-      mappedSections.sort((a, b) => {
-        const getRank = (name: string) => {
-          const lower = name.toLowerCase();
-          for (const key of Object.keys(subCatPriority)) {
-            if (lower.includes(key)) return subCatPriority[key];
-          }
-          return 99;
-        };
-
-        const rankA = getRank(a.label);
-        const rankB = getRank(b.label);
-
-        // Sort structurally based on the section names to prevent chaotic shifting
-        if (rankA !== rankB) {
-          return sortMode === "value-desc" ? rankA - rankB : rankB - rankA;
-        }
-
-        // Fallback: order by the highest numeric value (excluding Infinity) if ranks match
-        const valA = Math.max(...a.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
-        const valB = Math.max(...b.processedUnits.map(u => getSortValue(u)).filter(v => v !== Infinity), 0);
-        return sortMode === "value-desc" ? valB - valA : valA - valB;
-      });
-    }
-
-    return mappedSections;
-  }, [units, sortMode, statusFilter, isValueSort, tier]);
-
-  if (!isValueSort && sections.length > 0) {
-    const flattened = sections.flatMap(s => s.processedUnits);
-    if (flattened.length === 0) return null;
-    return viewMode === "grid" ? <UnitGrid units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={flattened} onAddGive={onAddGive} onAddGet={onAddGet} />;
-  }
-
-  if (sections.length === 0) return null;
-
-  return (
-    <div className="flex flex-col gap-10">
-      {sections.map(sec => {
-        const uniqueSecId = `${tier.toLowerCase()}-${sec.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-        return (
-          <div id={uniqueSecId} key={sec.label} className="scroll-mt-6">
-            <TierSubHeader label={sec.label} valueRange={sec.range} count={sec.processedUnits.length} />
-            {viewMode === "grid" ? <UnitGrid units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} /> : <UnitListTable units={sec.processedUnits} onAddGive={onAddGive} onAddGet={onAddGet} />}
-          </div>
-        );
-      })}
     </div>
   );
 }

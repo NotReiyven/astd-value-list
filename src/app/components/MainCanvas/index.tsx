@@ -1,29 +1,40 @@
 import { useState, useRef, useDeferredValue, useMemo, memo, useEffect } from "react";
 import { Search, X, ArrowUp } from "lucide-react";
-import { PopupUnit, FilterKey, MasterUnit } from "../../../types";
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { FilterKey, MasterUnit } from "../../../types";
 import { TIER_CONFIG, getTier } from "../../../data"; 
 import { useUnits } from "../../../context/UnitContext"; 
 
-import { UnitGrid } from "./UnitGrid";
-import { UnitListTable } from "./UnitListTable";
-import { TierBanner, DynamicTierSection, processUnits } from "./TierSections";
+import { TierGridCard, UnitGrid } from "./UnitGrid";
+import { UnitListRow, ListHeaderRow, UnitListTable } from "./UnitListTable";
+import { TierBanner, TierSubHeader, processUnits, buildSections } from "./TierSections";
 import { CanvasSkeleton } from "./CanvasSkeleton";
 import { CanvasControls } from "./CanvasControls";
 import { GuideType } from "../guides/AquaGuideOverlay";
 
-const STICKY_HEADER_CLASS = "relative z-30 bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8 mb-4 md:shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]";
+const STICKY_HEADER_CLASS = "bg-[#313338] pt-2 md:pt-3 pb-3 -mx-2 px-2 md:-mx-8 md:px-8";
+
+type VirtualItem = 
+  | { type: 'space-top'; id: string }
+  | { type: 'welcome'; id: string }
+  | { type: 'search-stats'; id: string; count: number }
+  | { type: 'no-results'; id: string }
+  | { type: 'tier-banner'; id: string; tier: any }
+  | { type: 'sub-header'; id: string; label: string; range: string; count: number }
+  | { type: 'grid-row'; id: string; units: MasterUnit[]; cols: number }
+  | { type: 'list-header'; id: string }
+  | { type: 'list-row'; id: string; unit: MasterUnit; isLast: boolean }
+  | { type: 'space-bottom'; id: string };
 
 export const MainCanvas = memo(function MainCanvas({
-  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, onAddGive, onAddGet, scrollToSection, startGuide
+  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, scrollToSection, startGuide
 }: {
   activeTierFilter: FilterKey; setActiveTierFilter: (f: FilterKey) => void;
   searchQuery: string; setSearchQuery: (s: string) => void;
-  onAddGive: (u: PopupUnit) => void; onAddGet: (u: PopupUnit) => void;
   scrollToSection?: { tier: string; sectionId: string } | null;
   startGuide: (type: GuideType) => void;
 }) {
   const { units: ALL_UNITS, isLoading } = useUnits(); 
-  const tier = TIER_CONFIG[activeTierFilter] ?? TIER_CONFIG["S"];
   
   const [showWelcome, setShowWelcome] = useState(() => {
     try { return localStorage.getItem("astd_welcome_dismissed") !== "true"; } 
@@ -40,60 +51,25 @@ export const MainCanvas = memo(function MainCanvas({
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
+  // Dynamic Column Calculation for the Virtualizer Grid
+  const colsRef = useRef(4);
+  const [cols, setCols] = useState(4);
   useEffect(() => {
-    if (!scrollToSection) return;
-    
-    skipNextResetRef.current = true;
-    setSearchQuery("");
-    setStatusFilter("all");
-    setSortMode("value-desc"); 
-    setActiveTierFilter(scrollToSection.tier as FilterKey);
-
-    let attempts = 0;
-    const maxAttempts = 40;
-
-    const tryScroll = () => {
-      const container = scrollRef.current;
-      const el = document.getElementById(scrollToSection.sectionId);
-
-      if (container && el) {
-        const containerRect = container.getBoundingClientRect();
-        const elRect = el.getBoundingClientRect();
-
-        if (elRect.height > 0 || attempts >= maxAttempts) {
-          const targetScrollTop = container.scrollTop + (elRect.top - containerRect.top) - 16;
-          container.scrollTo({
-            top: Math.max(0, targetScrollTop),
-            behavior: "smooth"
-          });
-          return;
+     if (!scrollRef.current) return;
+     const observer = new ResizeObserver(entries => {
+        const width = entries[0].contentRect.width;
+        const gap = window.innerWidth < 640 ? 12 : 20;
+        const padding = window.innerWidth < 768 ? 16 : 64; // px-2 or px-8
+        const available = width - padding;
+        const c = Math.max(1, Math.floor((available + gap) / (155 + gap)));
+        if (c !== colsRef.current) {
+           colsRef.current = c;
+           setCols(c);
         }
-      }
-
-      attempts++;
-      if (attempts < maxAttempts) {
-        requestAnimationFrame(tryScroll);
-      }
-    };
-
-    const raf = requestAnimationFrame(tryScroll);
-    return () => cancelAnimationFrame(raf);
-  }, [scrollToSection, setActiveTierFilter, setSearchQuery]);
-
-  useEffect(() => {
-    if (scrollToSection) return;
-    if (skipNextResetRef.current) {
-      skipNextResetRef.current = false;
-      return;
-    }
-    scrollRef.current?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
-  }, [deferredSearchQuery, statusFilter, sortMode, activeTierFilter, scrollToSection]);
-
-  const dismissWelcome = () => {
-    setShowWelcome(false);
-    try { localStorage.setItem("astd_welcome_dismissed", "true"); } 
-    catch (e) { console.error("Failed to save banner preference", e); }
-  };
+     });
+     observer.observe(scrollRef.current);
+     return () => observer.disconnect();
+  }, []);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const currentScroll = e.currentTarget.scrollTop;
@@ -134,6 +110,143 @@ export const MainCanvas = memo(function MainCanvas({
     return processUnits(rawFiltered, sortMode, statusFilter);
   }, [ALL_UNITS, deferredSearchQuery, activeTierFilter, sortMode, statusFilter]); 
 
+  const flattenedItems = useMemo(() => {
+    const items: VirtualItem[] = [];
+    items.push({ type: 'space-top', id: 'space-top' });
+
+    if (showWelcome && !deferredSearchQuery && statusFilter === "all" && sortMode === "value-desc") {
+       items.push({ type: 'welcome', id: 'welcome' });
+    }
+
+    if (deferredSearchQuery) {
+       items.push({ type: 'search-stats', id: 'search-stats', count: filteredAllUnits.length });
+       if (filteredAllUnits.length === 0) {
+          items.push({ type: 'no-results', id: 'no-results' });
+          return items;
+       }
+
+       ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"].forEach(tKey => {
+          const unitsInTier = filteredAllUnits.filter(u => getTier(u) === tKey);
+          if (unitsInTier.length === 0) return;
+
+          items.push({ type: 'tier-banner', id: `banner-${tKey}`, tier: TIER_CONFIG[tKey] });
+
+          if (viewMode === 'grid') {
+             for (let i = 0; i < unitsInTier.length; i += cols) {
+                items.push({ type: 'grid-row', id: `grid-${tKey}-${i}`, units: unitsInTier.slice(i, i + cols), cols });
+             }
+          } else {
+             items.push({ type: 'list-header', id: `list-head-${tKey}` });
+             unitsInTier.forEach((u, i) => {
+                items.push({ type: 'list-row', id: `list-${u.id}`, unit: u, isLast: i === unitsInTier.length - 1 });
+             });
+          }
+       });
+    } else {
+       const tiersToRender = activeTierFilter === "All" ? ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"] : [activeTierFilter];
+
+       tiersToRender.forEach(tKey => {
+          const rawUnits = UNITS_BY_TIER[tKey] || [];
+          const processed = processUnits(rawUnits, sortMode, statusFilter);
+
+          if (processed.length === 0 && activeTierFilter !== "All") {
+              items.push({ type: 'tier-banner', id: `banner-${tKey}`, tier: TIER_CONFIG[tKey] });
+              items.push({ type: 'no-results', id: `no-results-${tKey}` });
+              return;
+          }
+          if (processed.length === 0) return;
+
+          items.push({ type: 'tier-banner', id: `banner-${tKey}`, tier: TIER_CONFIG[tKey] });
+
+          if (isDefaultView) {
+              const sections = buildSections(rawUnits, sortMode, statusFilter, tKey);
+              sections.forEach(sec => {
+                 items.push({ type: 'sub-header', id: `sub-${tKey}-${sec.label}`, label: sec.label, range: sec.range, count: sec.processedUnits.length });
+
+                 if (viewMode === 'grid') {
+                    for (let i = 0; i < sec.processedUnits.length; i += cols) {
+                       items.push({ type: 'grid-row', id: `grid-${sec.label}-${i}`, units: sec.processedUnits.slice(i, i + cols), cols });
+                    }
+                 } else {
+                    items.push({ type: 'list-header', id: `list-head-${sec.label}` });
+                    sec.processedUnits.forEach((u, i) => {
+                       items.push({ type: 'list-row', id: `list-${u.id}`, unit: u, isLast: i === sec.processedUnits.length - 1 });
+                    });
+                 }
+              });
+          } else {
+              if (viewMode === 'grid') {
+                 for (let i = 0; i < processed.length; i += cols) {
+                    items.push({ type: 'grid-row', id: `grid-${tKey}-${i}`, units: processed.slice(i, i + cols), cols });
+                 }
+              } else {
+                 items.push({ type: 'list-header', id: `list-head-${tKey}` });
+                 processed.forEach((u, i) => {
+                    items.push({ type: 'list-row', id: `list-${u.id}`, unit: u, isLast: i === processed.length - 1 });
+                 });
+              }
+          }
+       });
+    }
+
+    items.push({ type: 'space-bottom', id: 'space-bottom' });
+    return items;
+  }, [showWelcome, deferredSearchQuery, statusFilter, sortMode, activeTierFilter, viewMode, cols, filteredAllUnits, UNITS_BY_TIER, isDefaultView]);
+
+  const virtualizer = useVirtualizer({
+    count: flattenedItems.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (index) => {
+       const item = flattenedItems[index];
+       switch(item.type) {
+         case 'space-top': return 16;
+         case 'welcome': return window.innerWidth < 768 ? 160 : 120;
+         case 'search-stats': return 40;
+         case 'no-results': return 200;
+         case 'tier-banner': return 120; 
+         case 'sub-header': return 60;
+         case 'grid-row': return 272; // 260px height + 12px gap
+         case 'list-header': return 45;
+         case 'list-row': return 57;
+         case 'space-bottom': return 100;
+         default: return 50;
+       }
+    },
+    overscan: 5,
+  });
+
+  // Jump to specific sections gracefully using the virtualizer's native scrolling
+  useEffect(() => {
+    if (!scrollToSection || flattenedItems.length === 0) return;
+    
+    skipNextResetRef.current = true;
+    setSearchQuery("");
+    setStatusFilter("all");
+    setSortMode("value-desc"); 
+    setActiveTierFilter(scrollToSection.tier as FilterKey);
+
+    const targetId = `sub-${scrollToSection.tier}-${scrollToSection.sectionId}`;
+    const idx = flattenedItems.findIndex(i => i.id === targetId);
+    if (idx !== -1) {
+      virtualizer.scrollToIndex(idx, { align: 'start' });
+    }
+  }, [scrollToSection, flattenedItems.length]); // Deliberately omit `virtualizer` and `flattenedItems` ref tracking
+
+  useEffect(() => {
+    if (scrollToSection) return;
+    if (skipNextResetRef.current) {
+      skipNextResetRef.current = false;
+      return;
+    }
+    scrollRef.current?.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [deferredSearchQuery, statusFilter, sortMode, activeTierFilter]);
+
+  const dismissWelcome = () => {
+    setShowWelcome(false);
+    try { localStorage.setItem("astd_welcome_dismissed", "true"); } 
+    catch (e) { console.error("Failed to save banner preference", e); }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#313338] relative">
       <style>{`
@@ -157,7 +270,7 @@ export const MainCanvas = memo(function MainCanvas({
         hasFiltersApplied={hasFiltersApplied}
         handleResetFilters={handleResetFilters}
         statusFilter={statusFilter}
-        setStatusFilter={(s) => { setStatusFilter(s); startGuide("filters"); }} // TRIGGER GUIDE
+        setStatusFilter={(s) => { setStatusFilter(s); startGuide("filters"); }} 
         sortMode={sortMode}
         setSortMode={setSortMode}
         viewMode={viewMode}
@@ -168,128 +281,99 @@ export const MainCanvas = memo(function MainCanvas({
         id="main-scroll-container"
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2 md:px-8 pb-4 md:pb-8 custom-scrollbar relative" 
+        className="flex-1 overflow-y-auto px-2 md:px-8 custom-scrollbar relative" 
         style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="h-4 md:h-6 flex-shrink-0 w-full" />
-        
-        <div>
-          {showWelcome && !deferredSearchQuery && statusFilter === "all" && sortMode === "value-desc" && (
-            <div className="mb-4 md:mb-8 flex flex-col md:flex-row gap-3 md:gap-4 bg-[#2B2D31] md:bg-transparent p-3 md:p-0 rounded-[8px] md:rounded-none border md:border-none border-[rgba(255,255,255,0.04)] mx-2 md:mx-0">
-              <div className="flex items-start justify-between md:hidden w-full">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[#5865F2] flex items-center justify-center text-lg">👋</div>
-                  <h2 className="text-[16px] font-bold text-[#F2F3F5] tracking-tight">Welcome!</h2>
-                </div>
-                <button onClick={dismissWelcome} className="text-[#80848E] hover:text-[#DBDEE1] p-1"><X className="w-4 h-4" /></button>
-              </div>
-              
-              <div className="hidden md:flex w-14 h-14 rounded-full bg-[#5865F2] items-center justify-center flex-shrink-0 text-3xl">👋</div>
-              
-              <div className="flex flex-col justify-center max-w-2xl">
-                <h2 className="hidden md:block text-[22px] font-bold text-[#F2F3F5] mb-1 font-sans tracking-tight">Welcome to the value-list!</h2>
-                <p className="text-[12px] md:text-[13px] text-[#B5BAC1] mb-2 md:mb-2.5 leading-relaxed">
-                  This is the official ASTD value list. <strong>Left-click</strong> any unit card to instantly add it to <i>You Give</i>, and <strong>Right-click</strong> to add it to <i>You Get</i>.
-                </p>
-                <div className="flex flex-wrap items-center gap-1.5 md:gap-3 text-[9px] md:text-[11px] font-bold text-[#949BA4]">
-                  <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">R = Rarity (/20)</span>
-                  <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">S = Supply (/5)</span>
-                  <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">D = Demand (/5)</span>
-                </div>
-              </div>
-              <button onClick={dismissWelcome} className="hidden md:block ml-auto self-start text-[#80848E] hover:text-[#DBDEE1] p-2"><X className="w-5 h-5" /></button>
+        {isLoading ? (
+          <div className="pt-4 md:pt-6">
+            <div className={`${STICKY_HEADER_CLASS} relative z-30 mb-4 shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]`}>
+              <TierBanner tier={TIER_CONFIG[activeTierFilter] ?? TIER_CONFIG["S"]} />
             </div>
-          )}
-
-          {isLoading ? (
-            <div className="mx-2 md:mx-0">
-               <div className={STICKY_HEADER_CLASS}>
-                  <TierBanner tier={tier} />
-               </div>
-               <CanvasSkeleton viewMode={viewMode} />
-            </div>
-          ) : deferredSearchQuery ? (
-             <div className="flex flex-col gap-4 mx-2 md:mx-0">
-               <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[12px] font-bold uppercase tracking-wider text-[#949BA4]">Search Results</span>
-                  <span className="text-[11px] font-bold bg-[rgba(255,255,255,0.06)] text-[#DBDEE1] px-2 py-0.5 rounded transition-all">{filteredAllUnits.length} Found</span>
-               </div>
-               {filteredAllUnits.length === 0 ? (
-                  <div className="py-24 text-center text-[#80848E] text-sm font-medium">No units found matching "{searchQuery}"</div>
-               ) : (
-                  <div className="flex flex-col gap-8 md:gap-14 mt-2">
-                    {["S", "A", "B", "C", "Pure", "Oddities", "Untiered"].map((tKey) => {
-                      const unitsInTier = filteredAllUnits.filter(u => getTier(u) === tKey);
-                      if (unitsInTier.length === 0) return null;
-                      const tCfg = TIER_CONFIG[tKey];
-                      return (
-                        <div id={`${tKey.toLowerCase()}-tier`} key={tKey} className="flex flex-col w-full relative">
-                          <div className={STICKY_HEADER_CLASS}>
-                            <TierBanner tier={tCfg} />
-                          </div>
-                          <div className="w-full">
-                            {viewMode === "grid" ? (
-                              <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                            ) : (
-                              <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                            )}
-                          </div>
+            <CanvasSkeleton viewMode={viewMode} />
+          </div>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const item = flattenedItems[virtualRow.index];
+              
+              return (
+                <div
+                  key={virtualRow.key}
+                  ref={virtualizer.measureElement}
+                  data-index={virtualRow.index}
+                  className="absolute top-0 left-0 w-full"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {item.type === 'space-top' && <div className="h-4 md:h-6" />}
+                  {item.type === 'space-bottom' && <div className="h-10 md:h-16" />}
+                  
+                  {item.type === 'welcome' && (
+                    <div className="mb-4 md:mb-8 flex flex-col md:flex-row gap-3 md:gap-4 bg-[#2B2D31] md:bg-transparent p-3 md:p-0 rounded-[8px] md:rounded-none border md:border-none border-[rgba(255,255,255,0.04)] mx-2 md:mx-0">
+                      <div className="flex items-start justify-between md:hidden w-full">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-[#5865F2] flex items-center justify-center text-lg">👋</div>
+                          <h2 className="text-[16px] font-bold text-[#F2F3F5] tracking-tight">Welcome!</h2>
                         </div>
-                      );
-                    })}
-                  </div>
-               )}
-             </div>
-          ) : activeTierFilter === "All" ? (
-              <div className="flex flex-col gap-8 md:gap-14 mx-2 md:mx-0">
-                {["S", "A", "B", "C", "Pure", "Oddities", "Untiered"].map((tKey) => {
-                  const rawUnitsInTier = UNITS_BY_TIER[tKey];
-                  const unitsInTier = processUnits(rawUnitsInTier, sortMode, statusFilter);
-                  if (unitsInTier.length === 0) return null;
-                  const tCfg = TIER_CONFIG[tKey];
-                  return (
-                    <div id={`${tKey.toLowerCase()}-tier`} key={tKey} className="flex flex-col w-full relative">
-                      <div className={STICKY_HEADER_CLASS}>
-                        <TierBanner tier={tCfg} />
+                        <button onClick={dismissWelcome} className="text-[#80848E] hover:text-[#DBDEE1] p-1"><X className="w-4 h-4" /></button>
                       </div>
-                      <div className="w-full">
-                        {isDefaultView ? (
-                          <DynamicTierSection tier={tKey} units={rawUnitsInTier} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
-                        ) : viewMode === "grid" ? (
-                          <UnitGrid units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                        ) : (
-                          <UnitListTable units={unitsInTier} onAddGive={onAddGive} onAddGet={onAddGet} />
-                        )}
+                      <div className="hidden md:flex w-14 h-14 rounded-full bg-[#5865F2] items-center justify-center flex-shrink-0 text-3xl">👋</div>
+                      <div className="flex flex-col justify-center max-w-2xl">
+                        <h2 className="hidden md:block text-[22px] font-bold text-[#F2F3F5] mb-1 font-sans tracking-tight">Welcome to the value-list!</h2>
+                        <p className="text-[12px] md:text-[13px] text-[#B5BAC1] mb-2 md:mb-2.5 leading-relaxed">
+                          This is the official ASTD value list. <strong>Left-click</strong> any unit card to instantly add it to <i>You Give</i>, and <strong>Right-click</strong> to add it to <i>You Get</i>.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5 md:gap-3 text-[9px] md:text-[11px] font-bold text-[#949BA4]">
+                          <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">R = Rarity (/20)</span>
+                          <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">S = Supply (/5)</span>
+                          <span className="bg-[#1E1F22] px-2 py-1 rounded border border-[rgba(255,255,255,0.04)]">D = Demand (/5)</span>
+                        </div>
                       </div>
+                      <button onClick={dismissWelcome} className="hidden md:block ml-auto self-start text-[#80848E] hover:text-[#DBDEE1] p-2"><X className="w-5 h-5" /></button>
                     </div>
-                  );
-                })}
-              </div>
-          ) : (
-            <div className="w-full mx-2 md:mx-0 relative">
-              <div className={STICKY_HEADER_CLASS}>
-                <TierBanner tier={tier} />
-              </div>
+                  )}
 
-              {processUnits(UNITS_BY_TIER[activeTierFilter] || [], sortMode, statusFilter).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-24 gap-4">
-                  <div className="w-14 h-14 rounded-[8px] flex items-center justify-center bg-[rgba(255,255,255,0.04)]"><Search className="w-6 h-6 text-[#4e5058]" /></div>
-                  <p className="text-sm font-bold text-[#4e5058]">No units match your current filters.</p>
-                </div>
-              ) : (
-                <div className="w-full pr-4 md:pr-0">
-                  {isDefaultView ? (
-                    <DynamicTierSection tier={activeTierFilter} units={UNITS_BY_TIER[activeTierFilter] || []} viewMode={viewMode} sortMode={sortMode} statusFilter={statusFilter} onAddGive={onAddGive} onAddGet={onAddGet} />
-                  ) : viewMode === "grid" ? (
-                    <UnitGrid units={processUnits(UNITS_BY_TIER[activeTierFilter] || [], sortMode, statusFilter)} onAddGive={onAddGive} onAddGet={onAddGet} />
-                  ) : (
-                    <UnitListTable units={processUnits(UNITS_BY_TIER[activeTierFilter] || [], sortMode, statusFilter)} onAddGive={onAddGive} onAddGet={onAddGet} />
+                  {item.type === 'search-stats' && (
+                    <div className="flex items-center gap-2 mb-2 mx-2 md:mx-0">
+                      <span className="text-[12px] font-bold uppercase tracking-wider text-[#949BA4]">Search Results</span>
+                      <span className="text-[11px] font-bold bg-[rgba(255,255,255,0.06)] text-[#DBDEE1] px-2 py-0.5 rounded transition-all">{item.count} Found</span>
+                    </div>
+                  )}
+
+                  {item.type === 'no-results' && (
+                    <div className="flex flex-col items-center justify-center py-24 gap-4">
+                      <div className="w-14 h-14 rounded-[8px] flex items-center justify-center bg-[rgba(255,255,255,0.04)]"><Search className="w-6 h-6 text-[#4e5058]" /></div>
+                      <p className="text-sm font-bold text-[#4e5058]">No units match your current filters.</p>
+                    </div>
+                  )}
+
+                  {item.type === 'tier-banner' && (
+                    <div className={`${STICKY_HEADER_CLASS} relative z-30 mb-4 shadow-[0_12px_20px_-15px_rgba(0,0,0,0.8)]`}>
+                      <TierBanner tier={item.tier} />
+                    </div>
+                  )}
+
+                  {item.type === 'sub-header' && (
+                    <TierSubHeader label={item.label} valueRange={item.range} count={item.count} />
+                  )}
+
+                  {item.type === 'grid-row' && (
+                    <div className="grid gap-3 sm:gap-5 w-full pb-3 sm:pb-5" style={{ gridTemplateColumns: `repeat(${item.cols}, minmax(0, 1fr))` }}>
+                      {item.units.map(u => <TierGridCard key={u.id} unit={u} />)}
+                    </div>
+                  )}
+
+                  {item.type === 'list-header' && (
+                    <ListHeaderRow />
+                  )}
+
+                  {item.type === 'list-row' && (
+                    <UnitListRow unit={item.unit} isLast={item.isLast} />
                   )}
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <button
