@@ -9,39 +9,38 @@ import { usePanelResize } from "../../../hooks/usePanelResize";
 import { fmtK, generateTextSummary, avgStat } from "./summaryUtils";
 import { useUnits } from "../../../context/UnitContext";
 import { GuideType } from "../guides/AquaGuideOverlay";
+import { useTradeStore } from "../../../store/useTradeStore";
 
 export function TradeAnalyzerPanel({
-  giveItems,
-  getItems,
-  onChangeQty,
-  onRemoveCard,
-  onAdd,
-  onSwap,
-  onOverwrite,
   isOpen = true,
   onClose,
   guideState,
   startGuide
 }: {
-  giveItems: TradeCard[];
-  getItems: TradeCard[];
-  onChangeQty: (col: "give" | "get", id: string, qty: number) => void;
-  onRemoveCard: (col: "give" | "get", id: string) => void;
-  onClear: (col: "give" | "get") => void;
-  onAdd: (col: "give" | "get", card: TradeCard) => void;
-  onSwap: () => void;
-  onOverwrite: (giveCards: TradeCard[], getCards: TradeCard[]) => void;
   isOpen?: boolean;
   onClose?: () => void;
   guideState?: { type: string | null; step: number };
   startGuide: (type: GuideType) => void;
 }) {
   const { units: ALL_UNITS } = useUnits();
+  
+  const { 
+    giveItems, 
+    getItems, 
+    changeQty, 
+    removeCard, 
+    clearSection, 
+    addCard, 
+    swap, 
+    overwrite, 
+    pinnedIds, 
+    togglePin, 
+    clearAllUnpinned 
+  } = useTradeStore();
+
   const [copied, setCopied] = useState(false);
   const [isGlobalDragging, setIsGlobalDragging] = useState(false);
-
   const [smartMenuOpen, setSmartMenuOpen] = useState(false);
-  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
   const [isMobile, setIsMobile] = useState(false);
   const { panelWidth, startResize, panelRef } = usePanelResize(400, 400, 800);
@@ -102,47 +101,24 @@ export function TradeAnalyzerPanel({
     };
   }, [giveItems, getItems]);
 
-  const togglePin = useCallback((col: "give" | "get", id: string) => {
-    setPinnedIds(prev => {
-      const pinKey = `${col}-${id}`;
-      const next = new Set(prev);
-      if (next.has(pinKey)) next.delete(pinKey);
-      else next.add(pinKey);
-      return next;
-    });
-    startGuide("management"); // TRIGGER GUIDE
-  }, [startGuide]);
-
-  const handleClearSection = useCallback((col: "give" | "get") => {
-    if (col === "give") {
-      onOverwrite(giveItems.filter(i => pinnedIds.has(`give-${i.id}`)), getItems);
-    } else {
-      onOverwrite(giveItems, getItems.filter(i => pinnedIds.has(`get-${i.id}`)));
-    }
-  }, [giveItems, getItems, pinnedIds, onOverwrite]);
-
   const handleGlobalClear = useCallback(() => {
-    setUndoCache({ give: [...giveItems], get: [...getItems] });
+    const previousState = clearAllUnpinned();
+    setUndoCache(previousState);
 
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
 
     undoTimerRef.current = setTimeout(() => {
       setUndoCache(null);
     }, 4000);
-
-    onOverwrite(
-      giveItems.filter(i => pinnedIds.has(`give-${i.id}`)), 
-      getItems.filter(i => pinnedIds.has(`get-${i.id}`))
-    );
-  }, [giveItems, getItems, pinnedIds, onOverwrite]);
+  }, [clearAllUnpinned]);
 
   const handleUndo = useCallback(() => {
     if (undoCache) {
-      onOverwrite(undoCache.give, undoCache.get);
+      overwrite(undoCache.give, undoCache.get);
       setUndoCache(null);
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     }
-  }, [undoCache, onOverwrite]);
+  }, [undoCache, overwrite]);
 
   const handleShare = useCallback(() => {
     const giveParts = giveItems.map((c) => `${c.qty}x ${c.name} (${fmtK(c.value * c.qty)})`).join("\n> ");
@@ -191,7 +167,6 @@ export function TradeAnalyzerPanel({
         </div>
         <span className="text-[14px] md:text-[15px] font-bold flex-1 text-[#F2F3F5] truncate">Trade Analyzer</span>
 
-        {/* TRIGGER SMART PARSER GUIDE ON CLICK */}
         <button onClick={() => { setSmartMenuOpen(!smartMenuOpen); startGuide("dictionary"); }} className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2] ${smartMenuOpen ? "bg-[rgba(88,101,242,0.15)] text-[#5865F2]" : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"}`} title="Context Recognition">
           <Wand2 className="w-4 h-4" />
         </button>
@@ -217,11 +192,6 @@ export function TradeAnalyzerPanel({
       {smartMenuOpen && (
         <SmartParserMenu 
           ALL_UNITS={ALL_UNITS} 
-          giveItems={giveItems} 
-          getItems={getItems} 
-          pinnedIds={pinnedIds} 
-          onOverwrite={onOverwrite} 
-          onAdd={onAdd} 
           onClose={() => setSmartMenuOpen(false)} 
         />
       )}
@@ -243,16 +213,16 @@ export function TradeAnalyzerPanel({
           type="give" 
           items={giveItems} 
           isDraggingGlobal={isGlobalDragging} 
-          onQtyChange={(id, qty) => onChangeQty("give", id, qty)} 
-          onRemove={(id) => onRemoveCard("give", id)} 
-          onClear={() => handleClearSection("give")} 
-          onAdd={(card) => onAdd("give", card)} 
-          pinnedIds={pinnedIds}
-          onTogglePin={(id) => togglePin("give", id)}
+          onQtyChange={(id, qty) => changeQty("give", id, qty)} 
+          onRemove={(id) => removeCard("give", id)} 
+          onClear={() => clearSection("give")} 
+          onAdd={(card) => addCard("give", card)} 
+          pinnedIds={new Set(pinnedIds)}
+          onTogglePin={(id) => { togglePin("give", id); startGuide("management"); }}
         />
         <div className="relative mx-3 md:mx-4 flex items-center justify-center my-1">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[rgba(255,255,255,0.04)]" /></div>
-          <button onClick={onSwap} className="relative flex items-center justify-center w-7 h-7 rounded-full transition-all duration-300 ease-out hover:scale-110 z-10 bg-[#1E1F22] border border-[rgba(255,255,255,0.08)] text-[#80848E] hover:text-[#DBDEE1] hover:bg-[#2B2D31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" title="Swap Give and Get">
+          <button onClick={swap} className="relative flex items-center justify-center w-7 h-7 rounded-full transition-all duration-300 ease-out hover:scale-110 z-10 bg-[#1E1F22] border border-[rgba(255,255,255,0.08)] text-[#80848E] hover:text-[#DBDEE1] hover:bg-[#2B2D31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" title="Swap Give and Get">
             <ArrowUpDown className="w-3 h-3 md:w-3.5 md:h-3.5" />
           </button>
         </div>
@@ -261,12 +231,12 @@ export function TradeAnalyzerPanel({
           type="get" 
           items={getItems} 
           isDraggingGlobal={isGlobalDragging} 
-          onQtyChange={(id, qty) => onChangeQty("get", id, qty)} 
-          onRemove={(id) => onRemoveCard("get", id)} 
-          onClear={() => handleClearSection("get")} 
-          onAdd={(card) => onAdd("get", card)} 
-          pinnedIds={pinnedIds}
-          onTogglePin={(id) => togglePin("get", id)}
+          onQtyChange={(id, qty) => changeQty("get", id, qty)} 
+          onRemove={(id) => removeCard("get", id)} 
+          onClear={() => clearSection("get")} 
+          onAdd={(card) => addCard("get", card)} 
+          pinnedIds={new Set(pinnedIds)}
+          onTogglePin={(id) => { togglePin("get", id); startGuide("management"); }}
         />
         <TradeNotices giveItems={giveItems} getItems={getItems} ALL_UNITS={ALL_UNITS} />
       </div>

@@ -5,7 +5,9 @@ import {
   Plus, 
   Lock,
   Megaphone,
-  LucideIcon
+  LucideIcon,
+  Shield,
+  FileText
 } from "lucide-react";
 import { FilterKey } from "../../types";
 import { useUnits } from "../../context/UnitContext";
@@ -27,6 +29,13 @@ const CATEGORIES: CategoryConfig[] = [
     id: "trading", label: "trading",
     channels: [
       { id: "value-list", label: "value-list", isLocked: false, hasThreads: true }
+    ]
+  },
+  {
+    id: "legal", label: "legal",
+    channels: [
+      { id: "terms-of-service", label: "terms-of-service", isLocked: true, icon: FileText },
+      { id: "privacy-policy", label: "privacy-policy", isLocked: true, icon: Shield }
     ]
   }
 ];

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { PanelLeft, Hash, Search, X, GraduationCap, Map, User, Settings2, Calculator, HelpCircle, Book } from "lucide-react";
 import { GuideType } from "../guides/AquaGuideOverlay";
+import { LiveAvatars } from "./LiveAvatars";
 
 interface TopBarProps {
   calcHeaderZ: string;
@@ -74,6 +75,10 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+        
+        {/* LIVE AVATARS RENDERED HERE */}
+        <LiveAvatars />
+
         <div className="relative">
           <button 
             onClick={handleHelpClick}

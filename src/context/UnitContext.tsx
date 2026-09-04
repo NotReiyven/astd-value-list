@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { get, set } from 'idb-keyval';
 import { MasterUnit } from '../types';
-import { ALL_UNITS as LOCAL_FALLBACK_UNITS } from '../data/units';
+import { ALL_UNITS as LOCAL_FALLBACK_UNITS, UNIT_METADATA } from '../data/units';
 import { getObtainability } from '../data/helpers';
 
 type UnitContextType = {
   units: MasterUnit[];
   changelog: string[];
-  notices: { title: string, date: string | null, content: string }[];
+  notices: { title: string; date: string | null; content: string }[];
   sheetTitle: string;
   lastUpdated: string;
   isLoading: boolean;
@@ -15,9 +15,7 @@ type UnitContextType = {
   isError: boolean;
 };
 
-// Bumped to v3 for the IndexedDB migration
-// In src/context/UnitContext.tsx
-const CACHE_VERSION = "astd_cache_v4"; // Bump from v3 to v4
+const CACHE_VERSION = "astd_cache_v5"; // Bump to v5 to invalidate stale hardcoded caches
 
 const UnitContext = createContext<UnitContextType>({
   units: LOCAL_FALLBACK_UNITS,
@@ -31,12 +29,10 @@ const UnitContext = createContext<UnitContextType>({
 });
 
 export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
-  // Initialize with fallbacks; we will quickly overwrite these via IDB
   const [units, setUnits] = useState<MasterUnit[]>(LOCAL_FALLBACK_UNITS);
   const [changelog, setChangelog] = useState<string[]>([]);
   const [notices, setNotices] = useState<any[]>([]);
   
-  // Lightweight scalar values can still safely use synchronous localStorage
   const [sheetTitle, setSheetTitle] = useState(() => localStorage.getItem('astd_title_cache') || "ASTD Official Value List");
   const [lastUpdated, setLastUpdated] = useState(() => localStorage.getItem('astd_date_cache') || new Date().toISOString());
   
@@ -45,7 +41,7 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
   const [isError, setIsError] = useState(false);
 
   useEffect(() => {
-    let mounted = true; // Guard to prevent state updates if the component unmounts
+    let mounted = true;
 
     const initCacheAndFetch = async () => {
       let hasValidCache = false;
@@ -53,7 +49,6 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
       try {
         const cacheVersion = localStorage.getItem('astd_cache_version');
         if (cacheVersion === CACHE_VERSION) {
-          // Read heavy payloads from IndexedDB in parallel
           const [cachedUnits, cachedChangelog, cachedNotices] = await Promise.all([
             get('astd_units_cache'),
             get('astd_changelog_cache'),
@@ -73,13 +68,11 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!mounted) return;
 
-      // If a valid cache exists, drop the loading screen and show the background sync spinner
       if (hasValidCache) {
         setIsLoading(false);
         setIsSyncing(true);
       }
 
-      // Fetch live data from the Netlify Serverless Function
       try {
         const res = await fetch('/.netlify/functions/syncSheet');
         if (!res.ok) throw new Error('API Response not OK');
@@ -96,7 +89,6 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
           localStorage.setItem('astd_date_cache', data.lastUpdated); 
         }
         
-        // Save to state and write back to IndexedDB
         if (data.changelog) { 
           setChangelog(data.changelog); 
           await set('astd_changelog_cache', data.changelog); 
@@ -108,35 +100,24 @@ export const UnitProvider = ({ children }: { children: React.ReactNode }) => {
 
         if (data?.units?.length > 0) {
           const mergedUnits = data.units.map((apiUnit: MasterUnit) => {
-            const apiCleanName = apiUnit.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-            let localMatch = LOCAL_FALLBACK_UNITS.find(u => {
-              const localCleanName = u.name.toLowerCase().replace(/[^a-z0-9]/g, "");
-              if (u.id === apiUnit.id) return true;
-              if (localCleanName === apiCleanName) return true;
-              if (u.aliases && u.aliases.length > 0) {
-                const cleanAliases = u.aliases.map(a => a.toLowerCase().replace(/[^a-z0-9]/g, ""));
-                if (cleanAliases.includes(apiCleanName)) return true;
-              }
-              return false;
-            });
+            const meta = UNIT_METADATA[apiUnit.id] || {};
 
             return {
               ...apiUnit,
-              imageUrl: localMatch?.imageUrl || apiUnit.imageUrl || "",
-              aliases: localMatch?.aliases || apiUnit.aliases || [],
-              obtainability: getObtainability(apiUnit) // Cached directly to the object here
+              subtitle: apiUnit.subtitle || meta.subtitle || "",
+              notice: apiUnit.notice || meta.notice || "",
+              aliases: meta.aliases || apiUnit.aliases || [],
+              obtainability: meta.obtainability || getObtainability(apiUnit),
+              imageUrl: `/units/${apiUnit.id}.webp`
             };
           });
           
-          // Strict deduplication
           const uniqueUnitsMap = new Map<string, MasterUnit>();
           mergedUnits.forEach((u: MasterUnit) => uniqueUnitsMap.set(u.id, u));
           const finalUniqueUnits = Array.from(uniqueUnitsMap.values());
 
           setUnits(finalUniqueUnits);
           
-          // Save structural clones directly to IndexedDB (No JSON.stringify needed!)
           await set('astd_units_cache', finalUniqueUnits);
           localStorage.setItem('astd_cache_version', CACHE_VERSION);
         }

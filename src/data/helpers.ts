@@ -1,6 +1,5 @@
 import { MasterUnit } from "../types";
 import { RARITY_SCALE } from "./config";
-import { UNIT_IMAGES } from "./images";
 
 export function getTier(u: MasterUnit): "S" | "A" | "B" | "C" | "Pure" | "Oddities" | "Untiered" {
   return (u.tier as "S" | "A" | "B" | "C" | "Pure" | "Oddities" | "Untiered") || "S";
@@ -20,12 +19,12 @@ export function getRarityLabel(v: number) {
 export function getProxyImage(unitId: string, fallbackUrl?: string) {
   if (!unitId) return null;
 
-  // If the unit exists in our local dictionary, serve the downloaded WebP
-  if (UNIT_IMAGES[unitId] && UNIT_IMAGES[unitId] !== "PLACEHOLDER_URL") {
-    return `/units/${unitId}.webp`;
+  // Since UnitContext defaults to local paths, serve them directly
+  if (fallbackUrl && fallbackUrl.startsWith('/units/')) {
+    return fallbackUrl;
   }
 
-  // Fallback for brand-new units added to the sheet before the next local build
+  // Fallback for brand-new units added to the sheet with raw Wikia URLs
   if (!fallbackUrl || fallbackUrl === "PLACEHOLDER_URL") return null;
   if (fallbackUrl.includes("imgur.com")) return fallbackUrl;
   

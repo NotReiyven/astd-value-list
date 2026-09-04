@@ -1,10 +1,12 @@
 import { useState, useEffect, Suspense, lazy, useRef, useCallback } from "react";
 import { Hash, Calculator, Check } from "lucide-react";
-import { FilterKey, PopupUnit, TradeCard } from "../types";
-import { useStickyState, isTradeCardArray, isBoolean, isNonEmptyString } from "../hooks/useStickyState";
+import { FilterKey, PopupUnit } from "../types";
+import { useStickyState, isBoolean, isNonEmptyString } from "../hooks/useStickyState";
 import { AquaGuideOverlay, GuideType } from "./components/guides/AquaGuideOverlay";
 import { TopBar } from "./components/layout/TopBar";
 import { WelcomeModal } from "./components/WelcomeModal";
+import { CookieBanner } from "./components/layout/CookieBanner";
+import { useTradeStore } from "../store/useTradeStore";
 
 const TradeAnalyzerPanel = lazy(() => import("./components/TradeAnalyzer").then(module => ({ default: module.TradeAnalyzerPanel })));
 const Sidebar = lazy(() => import("./components/Sidebar").then(module => ({ default: module.Sidebar })));
@@ -12,12 +14,15 @@ const MainCanvas = lazy(() => import("./components/MainCanvas").then(module => (
 const HomeChannel = lazy(() => import("./components/HomeChannel").then(module => ({ default: module.HomeChannel })));
 const TutorialChannel = lazy(() => import("./components/TutorialChannel").then(module => ({ default: module.TutorialChannel })));
 const ExtraNoticesChannel = lazy(() => import("./components/ExtraNoticesChannel").then(module => ({ default: module.ExtraNoticesChannel })));
+const LegalChannel = lazy(() => import("./components/LegalChannel").then(module => ({ default: module.LegalChannel })));
 
 const CHANNEL_INFO: Record<string, { title: string; subtitle: string }> = {
   "home": { title: "home", subtitle: "Welcome to the ASTD Value List! Important information and update logs are posted here." },
   "value-list": { title: "value-list", subtitle: "Official ASTD unit values • Live Updated" },
   "tutorial": { title: "tutorial", subtitle: "Learn how to use the ASTD trading calculator and value list." },
-  "extra-notices": { title: "extra-notices", subtitle: "Additional rules, exceptions, and community notes." }
+  "extra-notices": { title: "extra-notices", subtitle: "Additional rules, exceptions, and community notes." },
+  "terms-of-service": { title: "terms-of-service", subtitle: "Rules and guidelines for using the ASTD Value List." },
+  "privacy-policy": { title: "privacy-policy", subtitle: "How we handle and protect your data." }
 };
 
 export default function App() {
@@ -25,8 +30,9 @@ export default function App() {
   const [guideState, setGuideState] = useState<{ type: GuideType; step: number }>({ type: null, step: 0 });
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
 
-  const [globalYouGive, setGlobalYouGive] = useStickyState<TradeCard[]>([], "astd_give", isTradeCardArray);
-  const [globalYouGet,  setGlobalYouGet]  = useStickyState<TradeCard[]>([], "astd_get", isTradeCardArray);
+  const giveItems = useTradeStore((s) => s.giveItems);
+  const getItems = useTradeStore((s) => s.getItems);
+
   const [activeChannel, setActiveChannel] = useStickyState("home", "astd_channel", isNonEmptyString);
   const [activeTierFilter, setActiveTierFilter] = useStickyState<FilterKey>("S", "astd_tier");
 
@@ -43,7 +49,7 @@ export default function App() {
 
   const touchStartPos = useRef<{x: number, y: number} | null>(null);
   const [toast, setToast] = useState<{ id: number; unitName: string; type: "give" | "get" } | null>(null);
-  const activeItemsCount = globalYouGive.reduce((acc, c) => acc + c.qty, 0) + globalYouGet.reduce((acc, c) => acc + c.qty, 0);
+  const activeItemsCount = giveItems.reduce((acc, c) => acc + c.qty, 0) + getItems.reduce((acc, c) => acc + c.qty, 0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -56,6 +62,32 @@ export default function App() {
     }, 500);
     return () => clearTimeout(timer);
   }, [setIsRosterOpen, completedGuides]);
+
+  useEffect(() => {
+    const handleTradeAdded = (e: Event) => {
+      const customEvent = e as CustomEvent<{ name: string; type: "give" | "get" }>;
+      if (!customEvent.detail) return;
+      setToast({ id: Date.now(), unitName: customEvent.detail.name, type: customEvent.detail.type });
+      setGuideState(prev => (prev.type === "main" && prev.step === 2) ? { ...prev, step: 3 } : prev);
+    };
+    
+    // Listen for manual navigation events (e.g. from the Cookie Banner)
+    const handleNavigate = (e: Event) => {
+      const target = (e as CustomEvent<string>).detail;
+      if (target) {
+        setActiveChannel(target);
+        if (window.innerWidth < 768) setIsRosterOpen(false);
+      }
+    };
+
+    window.addEventListener("trade-added", handleTradeAdded);
+    window.document.addEventListener("navigate", handleNavigate);
+    
+    return () => {
+      window.removeEventListener("trade-added", handleTradeAdded);
+      window.document.removeEventListener("navigate", handleNavigate);
+    };
+  }, []);
 
   const startGuide = useCallback((type: GuideType, force: boolean = false) => {
     if (!force && type && completedGuides[type]) return;
@@ -73,7 +105,6 @@ export default function App() {
   const endGuide = useCallback(() => {
     if (guideState.type) {
       setCompletedGuides(prev => ({ ...prev, [guideState.type as string]: true }));
-      
       if (guideState.type === "main") {
         if (localStorage.getItem("astd_welcome_acknowledged") !== "true") {
           setTimeout(() => window.dispatchEvent(new Event("open-welcome-modal")), 400);
@@ -103,7 +134,8 @@ export default function App() {
       import("./components/MainCanvas"),
       import("./components/HomeChannel"),
       import("./components/TutorialChannel"),
-      import("./components/ExtraNoticesChannel")
+      import("./components/ExtraNoticesChannel"),
+      import("./components/LegalChannel")
     ]).then(() => setTimeout(() => setIsBooting(false), 1500))
       .catch(() => setIsBooting(false));
   }, []);
@@ -146,58 +178,14 @@ export default function App() {
   }, [setActiveChannel, setActiveTierFilter, setIsRosterOpen]);
 
   const handleAddGive = useCallback((unit: PopupUnit) => {
-    setGlobalYouGive((prev) => {
-      const existing = prev.find((c) => c.id === unit.id);
-      if (existing) return prev.map((c) => c.id === unit.id ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: unit.value, demand: unit.demand, qty: 1 }];
-    });
-    setToast({ id: Date.now(), unitName: unit.name, type: "give" });
-    if (guideState.type === "main" && guideState.step === 2) setGuideState(prev => ({ ...prev, step: 3 }));
-  }, [setGlobalYouGive, guideState]);
+    useTradeStore.getState().addCard("give", { ...unit, qty: 1 });
+    window.dispatchEvent(new CustomEvent("trade-added", { detail: { name: unit.name, type: "give" } }));
+  }, []);
 
   const handleAddGet = useCallback((unit: PopupUnit) => {
-    setGlobalYouGet((prev) => {
-      const existing = prev.find((c) => c.id === unit.id);
-      if (existing) return prev.map((c) => c.id === unit.id ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { id: unit.id, name: unit.name, subtitle: unit.subtitle, value: unit.value, demand: unit.demand, qty: 1 }];
-    });
-    setToast({ id: Date.now(), unitName: unit.name, type: "get" });
-    if (guideState.type === "main" && guideState.step === 2) setGuideState(prev => ({ ...prev, step: 3 }));
-  }, [setGlobalYouGet, guideState]);
-
-  const handleChangeQty = useCallback((col: "give" | "get", id: string, qty: number) => {
-    const setter = col === "give" ? setGlobalYouGive : setGlobalYouGet;
-    setter((prev) => prev.map((c) => (c.id === id ? { ...c, qty } : c)));
-  }, [setGlobalYouGive, setGlobalYouGet]);
-
-  const handleRemoveCard = useCallback((col: "give" | "get", id: string) => {
-    const setter = col === "give" ? setGlobalYouGive : setGlobalYouGet;
-    setter((prev) => prev.filter((c) => c.id !== id));
-  }, [setGlobalYouGive, setGlobalYouGet]);
-
-  const handleClear = useCallback((col: "give" | "get") => {
-    if (col === "give") setGlobalYouGive([]);
-    else setGlobalYouGet([]);
-  }, [setGlobalYouGive, setGlobalYouGet]);
-
-  const handleOverwrite = useCallback((giveCards: TradeCard[], getCards: TradeCard[]) => {
-    setGlobalYouGive(giveCards);
-    setGlobalYouGet(getCards);
-  }, [setGlobalYouGive, setGlobalYouGet]);
-
-  const handleAddCard = useCallback((col: "give" | "get", card: TradeCard) => {
-    const setter = col === "give" ? setGlobalYouGive : setGlobalYouGet;
-    setter((prev) => {
-      const existing = prev.find((c) => c.id === card.id);
-      if (existing) return prev.map((c) => c.id === card.id ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, card];
-    });
-  }, [setGlobalYouGive, setGlobalYouGet]);
-
-  const handleSwap = useCallback(() => {
-    setGlobalYouGive([...globalYouGet]);
-    setGlobalYouGet([...globalYouGive]);
-  }, [globalYouGet, globalYouGive, setGlobalYouGive, setGlobalYouGet]);
+    useTradeStore.getState().addCard("get", { ...unit, qty: 1 });
+    window.dispatchEvent(new CustomEvent("trade-added", { detail: { name: unit.name, type: "get" } }));
+  }, []);
 
   const handleToggleAnalyzer = useCallback(() => {
     setIsAnalyzerOpen(prev => !prev);
@@ -263,6 +251,7 @@ export default function App() {
       `}</style>
       <Suspense fallback={null}>
         
+        <CookieBanner />
         <WelcomeModal />
         <AquaGuideOverlay guideState={guideState} onEndGuide={endGuide} />
 
@@ -328,12 +317,12 @@ export default function App() {
                 setActiveTierFilter={setActiveTierFilter} 
                 searchQuery={globalSearchQuery} 
                 setSearchQuery={setGlobalSearchQuery} 
-                onAddGive={handleAddGive} 
-                onAddGet={handleAddGet} 
                 scrollToSection={scrollToSection}
                 startGuide={startGuide}
               />
             ) : activeChannel === "extra-notices" ? ( <ExtraNoticesChannel />
+            ) : activeChannel === "terms-of-service" ? ( <LegalChannel type="tos" />
+            ) : activeChannel === "privacy-policy" ? ( <LegalChannel type="privacy" />
             ) : (
               <div className="flex-1 flex items-center justify-center bg-[#313338] transition-all duration-300 animate-fade-in px-4">
                  <div className="text-center animate-slide-up"><h2 className="text-2xl font-bold text-[#F2F3F5] mb-2 capitalize">Welcome to {activeChannel}</h2><p className="text-[#949BA4]">This channel is currently under construction.</p></div>
@@ -365,14 +354,6 @@ export default function App() {
             <TradeAnalyzerPanel 
               isOpen={isAnalyzerOpen}
               onClose={() => setIsAnalyzerOpen(false)}
-              giveItems={globalYouGive} 
-              getItems={globalYouGet} 
-              onChangeQty={handleChangeQty} 
-              onRemoveCard={handleRemoveCard} 
-              onClear={handleClear} 
-              onAdd={handleAddCard} 
-              onSwap={handleSwap} 
-              onOverwrite={handleOverwrite} 
               guideState={guideState}
               startGuide={startGuide}
             />

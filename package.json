@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@netlify/functions": "^2.8.0",
+    "@supabase/supabase-js": "^2.115.0",
     "@tanstack/react-virtual": "^3.14.10",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.3",

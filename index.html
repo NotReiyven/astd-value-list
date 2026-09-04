@@ -6,27 +6,33 @@
     <title>ASTD Value List Website</title>
     <meta name="description" content="Calculate and analyze Roblox item trades with real-time value comparisons, demand insights, and customizable unit management for savvy traders." />
 
-    <!-- Google tag (gtag.js) -->
+    <!-- Google tag (gtag.js) with Consent Mode v2 -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-2R3P9SZK74"></script>
     <script>
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
 
+      // Default consent to 'denied' BEFORE loading config
+      gtag('consent', 'default', {
+        'analytics_storage': 'denied',
+        'ad_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied',
+        'wait_for_update': 500
+      });
+
+      gtag('js', new Date());
       gtag('config', 'G-2R3P9SZK74');
     </script>
 
-    <!-- OPTIMIZATION: Preconnect to Google Fonts to establish early network connections -->
+    <!-- Preconnect to Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    
-    <!-- OPTIMIZATION: Fetch the fonts immediately as a stylesheet -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
     <link rel="dns-prefetch" href="https://static.wikia.nocookie.net" />
+    
     <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
   </head>
-
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

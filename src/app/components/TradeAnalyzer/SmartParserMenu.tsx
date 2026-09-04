@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Wand2, X, Book, HelpCircle, TriangleAlert, Trash2, Search, Check } from "lucide-react";
 import { TradeCard, MasterUnit } from "../../../types";
 import { parseSmartTrade, AmbiguousToken, getSlangCache, removeSlang, learnSlang } from "./smartParser";
-import { getProxyImage } from "../../../data";
 import { getAvatarStyle, getInitials } from "./summaryUtils";
 import { useTradeStore } from "../../../store/useTradeStore";
+import { getProxyImage } from "../../../data";
 
 interface SmartParserMenuProps {
   ALL_UNITS: MasterUnit[];
@@ -90,6 +90,9 @@ export function SmartParserMenu({ ALL_UNITS, onClose }: SmartParserMenuProps) {
           demand: resolvedUnit.demand, qty
       });
       learnSlang(ambiguousItems[index].rawName, resolvedUnit.id);
+      
+      // Fire global toast notification
+      window.dispatchEvent(new CustomEvent("trade-added", { detail: { name: resolvedUnit.name, type: col } }));
     }
 
     setAmbiguousItems(prev => {
@@ -216,7 +219,6 @@ export function SmartParserMenu({ ALL_UNITS, onClose }: SmartParserMenuProps) {
                   className="w-full sm:w-[100px] shrink-0 bg-[#1E1F22] border border-transparent rounded-[4px] px-3 py-2 text-[13px] text-[#F2F3F5] outline-none placeholder-[#80848E] focus:ring-1 focus:ring-[#5865F2] focus:border-[#5865F2] transition-all" 
                 />
 
-                {/* --- CUSTOM SEARCHABLE DROPDOWN --- */}
                 <div className="relative flex-1" ref={dropdownRef}>
                   <div className={`flex items-center bg-[#1E1F22] rounded-[4px] px-3 py-2 transition-all border ${isDropdownOpen ? 'border-[#5865F2] ring-1 ring-[#5865F2]' : 'border-transparent'}`}>
                     <Search className="w-4 h-4 text-[#80848E] mr-2 shrink-0" />
@@ -274,7 +276,6 @@ export function SmartParserMenu({ ALL_UNITS, onClose }: SmartParserMenuProps) {
                     </div>
                   )}
                 </div>
-                {/* ---------------------------------- */}
 
                 <button 
                   onClick={handleAddSlang} 
