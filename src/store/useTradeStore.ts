@@ -82,6 +82,16 @@ export const useTradeStore = create<TradeState>()(
     }),
     {
       name: 'astd_trade_storage',
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+          // Fallback mechanism to clear out corrupted older states safely
+          persistedState.giveItems = Array.isArray(persistedState.giveItems) ? persistedState.giveItems : [];
+          persistedState.getItems = Array.isArray(persistedState.getItems) ? persistedState.getItems : [];
+          persistedState.pinnedIds = Array.isArray(persistedState.pinnedIds) ? persistedState.pinnedIds : [];
+        }
+        return persistedState as TradeState;
+      },
     }
   )
 );

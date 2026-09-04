@@ -57,18 +57,18 @@ export function Sidebar({
   const dynamicTierGroups = useMemo(() => {
     const order = ["S", "A", "B", "C", "Pure", "Oddities", "Untiered"];
     const colorMap: Record<string, string> = { S: "#dd7e6b", A: "#a855f7", B: "#3b82f6", C: "#22c55e", Pure: "#9ca3af", Oddities: "#8b5cf6", Untiered: "#52525b" };
-    
+
     const subCatPriority: Record<string, number> = {
       "top": 1,
       "high": 2,
       "mid": 3,
       "low": 4
     };
-    
+
     return order.map(tier => {
       const tierUnits = units.filter(u => getTier(u) === tier);
       let subCats = Array.from(new Set(tierUnits.map(u => u.subCategory || "Uncategorized")));
-      
+
       if (["S", "A", "B", "C"].includes(tier)) {
         subCats.sort((a, b) => {
           const getRank = (name: string) => {
@@ -117,10 +117,9 @@ export function Sidebar({
         <div className="flex flex-col px-2 pb-6">
           {CATEGORIES.map((cat) => {
             const isCollapsed = collapsedCategories[cat.id];
-            const isChannelGuide = guideState?.type === "channels" && cat.id === "important";
 
             return (
-              <div key={cat.id} className={`mt-4 flex flex-col rounded-[8px] transition-all ${isChannelGuide ? "ring-2 ring-[#5865F2] bg-[rgba(88,101,242,0.05)] shadow-[0_0_20px_rgba(88,101,242,0.2)] animate-pulse p-1" : ""}`}>
+              <div key={cat.id} className="mt-4 flex flex-col rounded-[8px] transition-all">
                 <div 
                   className="flex items-center justify-between px-0.5 mb-1 group cursor-pointer text-[#949BA4] hover:text-[#DBDEE1]"
                   onClick={() => toggleCategory(cat.id)}
@@ -136,27 +135,31 @@ export function Sidebar({
                   className={`transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}
                   style={{ display: 'grid', gridTemplateRows: isCollapsed ? '0fr' : '1fr' }}
                 >
-                  <div className="overflow-hidden flex flex-col min-h-0">
+                  <div className="overflow-visible flex flex-col min-h-0">
                     {cat.channels.map((channel) => {
                       const isActive = activeChannel === channel.id;
+                      
+                      // Identify if this is the active tutorial target
                       const isTarget = guideState?.type === "main" && guideState.step === 1 && channel.id === "value-list";
                       const Icon = channel.icon || Hash;
-                      
+
                       return (
-                        <div key={channel.id} className="flex flex-col">
+                        <div key={channel.id} className="flex flex-col relative">
                           <button
                             onClick={() => setActiveChannel(channel.id)}
                             className={`group w-full flex items-center justify-between px-2 py-1.5 mb-[2px] rounded-[4px] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                              isActive
-                                ? "bg-[rgba(78,80,88,0.6)] text-[#F2F3F5] translate-x-1"
-                                : "text-[#80848E] hover:bg-[rgba(78,80,88,0.3)] hover:text-[#DBDEE1] hover:translate-x-1"
-                            } ${isTarget ? "ring-2 ring-[#5865F2] bg-[#5865F2]/20 animate-sonar" : ""}`}
+                              isTarget 
+                                ? "bg-[#5865F2] text-white shadow-[0_0_20px_rgba(88,101,242,0.6)] ring-2 ring-[#5865F2] translate-x-1 z-50 relative animate-pulse"
+                                : isActive
+                                  ? "bg-[rgba(78,80,88,0.6)] text-[#F2F3F5] translate-x-1"
+                                  : "text-[#80848E] hover:bg-[rgba(78,80,88,0.3)] hover:text-[#DBDEE1] hover:translate-x-1"
+                            }`}
                           >
                             <div className="flex items-center gap-1.5 min-w-0">
                               {channel.isLocked ? (
                                 <div className="relative flex items-center justify-center w-5 h-5 opacity-70 flex-shrink-0">
                                   <Icon className="w-5 h-5" />
-                                  <Lock className="w-2.5 h-2.5 absolute bottom-0 right-0 bg-[#2B2D31] rounded-full p-[1px]" />
+                                  <Lock className={`w-2.5 h-2.5 absolute bottom-0 right-0 rounded-full p-[1px] ${isTarget ? 'bg-[#5865F2]' : 'bg-[#2B2D31]'}`} />
                                 </div>
                               ) : (
                                 <Icon className="w-5 h-5 opacity-70 flex-shrink-0" />

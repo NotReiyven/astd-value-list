@@ -27,12 +27,13 @@ type VirtualItem =
   | { type: 'space-bottom'; id: string };
 
 export const MainCanvas = memo(function MainCanvas({
-  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, scrollToSection, startGuide
+  activeTierFilter, setActiveTierFilter, searchQuery, setSearchQuery, scrollToSection, startGuide, guideState
 }: {
   activeTierFilter: FilterKey; setActiveTierFilter: (f: FilterKey) => void;
   searchQuery: string; setSearchQuery: (s: string) => void;
   scrollToSection?: { tier: string; sectionId: string } | null;
   startGuide: (type: GuideType) => void;
+  guideState?: { type: GuideType | null; step: number };
 }) {
   const { units: ALL_UNITS, isLoading } = useUnits(); 
   
@@ -51,7 +52,6 @@ export const MainCanvas = memo(function MainCanvas({
 
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
-  // Dynamic Column Calculation for the Virtualizer Grid
   const colsRef = useRef(4);
   const [cols, setCols] = useState(4);
   useEffect(() => {
@@ -59,7 +59,7 @@ export const MainCanvas = memo(function MainCanvas({
      const observer = new ResizeObserver(entries => {
         const width = entries[0].contentRect.width;
         const gap = window.innerWidth < 640 ? 12 : 20;
-        const padding = window.innerWidth < 768 ? 16 : 64; // px-2 or px-8
+        const padding = window.innerWidth < 768 ? 16 : 64; 
         const available = width - padding;
         const c = Math.max(1, Math.floor((available + gap) / (155 + gap)));
         if (c !== colsRef.current) {
@@ -205,7 +205,7 @@ export const MainCanvas = memo(function MainCanvas({
          case 'no-results': return 200;
          case 'tier-banner': return 120; 
          case 'sub-header': return 60;
-         case 'grid-row': return 272; // 260px height + 12px gap
+         case 'grid-row': return 272;
          case 'list-header': return 45;
          case 'list-row': return 57;
          case 'space-bottom': return 100;
@@ -215,7 +215,6 @@ export const MainCanvas = memo(function MainCanvas({
     overscan: 5,
   });
 
-  // Jump to specific sections gracefully using the virtualizer's native scrolling
   useEffect(() => {
     if (!scrollToSection || flattenedItems.length === 0) return;
     
@@ -230,7 +229,7 @@ export const MainCanvas = memo(function MainCanvas({
     if (idx !== -1) {
       virtualizer.scrollToIndex(idx, { align: 'start' });
     }
-  }, [scrollToSection, flattenedItems.length]); // Deliberately omit `virtualizer` and `flattenedItems` ref tracking
+  }, [scrollToSection, flattenedItems.length]); 
 
   useEffect(() => {
     if (scrollToSection) return;
@@ -246,6 +245,8 @@ export const MainCanvas = memo(function MainCanvas({
     try { localStorage.setItem("astd_welcome_dismissed", "true"); } 
     catch (e) { console.error("Failed to save banner preference", e); }
   };
+
+  const isStatsTarget = guideState?.type === "stats";
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#313338] relative">
@@ -263,19 +264,22 @@ export const MainCanvas = memo(function MainCanvas({
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
       `}</style>
 
-      <CanvasControls 
-        activeTierFilter={activeTierFilter}
-        setActiveTierFilter={setActiveTierFilter}
-        deferredSearchQuery={deferredSearchQuery}
-        hasFiltersApplied={hasFiltersApplied}
-        handleResetFilters={handleResetFilters}
-        statusFilter={statusFilter}
-        setStatusFilter={(s) => { setStatusFilter(s); startGuide("filters"); }} 
-        sortMode={sortMode}
-        setSortMode={setSortMode}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-      />
+      {/* Filter Highlight Wrap */}
+      <div className={`relative transition-all duration-300 ${guideState?.type === "filters" ? "ring-2 ring-[#5865F2] rounded-[8px] bg-[rgba(88,101,242,0.15)] shadow-[0_0_20px_rgba(88,101,242,0.4)] z-[100005] mx-4 mb-2 animate-pulse" : "z-40"}`}>
+        <CanvasControls 
+          activeTierFilter={activeTierFilter}
+          setActiveTierFilter={setActiveTierFilter}
+          deferredSearchQuery={deferredSearchQuery}
+          hasFiltersApplied={hasFiltersApplied}
+          handleResetFilters={handleResetFilters}
+          statusFilter={statusFilter}
+          setStatusFilter={(s) => { setStatusFilter(s); startGuide("filters"); }} 
+          sortMode={sortMode}
+          setSortMode={setSortMode}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
+        />
+      </div>
 
       <div 
         id="main-scroll-container"
@@ -292,7 +296,7 @@ export const MainCanvas = memo(function MainCanvas({
             <CanvasSkeleton viewMode={viewMode} />
           </div>
         ) : (
-          <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+          <div className={`relative ${isStatsTarget ? 'ring-2 ring-[#5865F2] rounded-[8px] bg-[rgba(88,101,242,0.05)] shadow-[0_0_20px_rgba(88,101,242,0.2)] z-[100005]' : ''}`} style={{ height: virtualizer.getTotalSize(), width: '100%' }}>
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const item = flattenedItems[virtualRow.index];
               
@@ -357,7 +361,7 @@ export const MainCanvas = memo(function MainCanvas({
                   )}
 
                   {item.type === 'grid-row' && (
-                    <div className="grid gap-3 sm:gap-5 w-full pb-3 sm:pb-5" style={{ gridTemplateColumns: `repeat(${item.cols}, minmax(0, 1fr))` }}>
+                    <div className={`grid gap-3 sm:gap-5 w-full pb-3 sm:pb-5 ${isStatsTarget && virtualRow.index === 1 ? 'animate-pulse' : ''}`} style={{ gridTemplateColumns: `repeat(${item.cols}, minmax(0, 1fr))` }}>
                       {item.units.map(u => <TierGridCard key={u.id} unit={u} />)}
                     </div>
                   )}
@@ -367,7 +371,9 @@ export const MainCanvas = memo(function MainCanvas({
                   )}
 
                   {item.type === 'list-row' && (
-                    <UnitListRow unit={item.unit} isLast={item.isLast} />
+                    <div className={isStatsTarget && virtualRow.index === 1 ? 'animate-pulse ring-2 ring-[#5865F2]' : ''}>
+                       <UnitListRow unit={item.unit} isLast={item.isLast} />
+                    </div>
                   )}
                 </div>
               );

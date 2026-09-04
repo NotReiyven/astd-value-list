@@ -146,6 +146,8 @@ export function TradeAnalyzerPanel({
   }, [giveItems, getItems, giveTotal, getTotal, ALL_UNITS]);
 
   const isMainStep4 = guideState?.type === "main" && guideState?.step === 4;
+  const isWandTarget = guideState?.type === "dictionary" || guideState?.type === "advanced";
+  const isClearTarget = guideState?.type === "management";
 
   return (
     <div 
@@ -167,13 +169,31 @@ export function TradeAnalyzerPanel({
         </div>
         <span className="text-[14px] md:text-[15px] font-bold flex-1 text-[#F2F3F5] truncate">Trade Analyzer</span>
 
-        <button onClick={() => { setSmartMenuOpen(!smartMenuOpen); startGuide("dictionary"); }} className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2] ${smartMenuOpen ? "bg-[rgba(88,101,242,0.15)] text-[#5865F2]" : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"}`} title="Context Recognition">
+        <button 
+          onClick={() => { setSmartMenuOpen(!smartMenuOpen); startGuide("dictionary"); }} 
+          className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+            isWandTarget 
+              ? "bg-[#5865F2] text-white shadow-[0_0_20px_rgba(88,101,242,0.8)] ring-2 ring-[#5865F2] z-[100005] relative animate-pulse" 
+              : smartMenuOpen 
+                ? "bg-[rgba(88,101,242,0.15)] text-[#5865F2]" 
+                : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"
+          }`} 
+          title="Context Recognition"
+        >
           <Wand2 className="w-4 h-4" />
         </button>
-        <button onClick={handleGlobalClear} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" title="Clear trade">
+        <button 
+          onClick={handleGlobalClear} 
+          className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-[4px] transition-all duration-300 ease-out hover:scale-110 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+            isClearTarget 
+              ? "bg-[#ed4245] text-white shadow-[0_0_20px_rgba(237,66,69,0.8)] ring-2 ring-[#ed4245] z-[100005] relative animate-pulse" 
+              : "text-[#B5BAC1] hover:bg-[rgba(255,255,255,0.05)] hover:text-[#F2F3F5]"
+          }`} 
+          title="Clear trade"
+        >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
-        <button onClick={handleShare} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-[12px] font-bold transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg active:scale-95 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" style={{ background: copied ? "#23a559" : "#5865F2", fontFamily: "'Inter', sans-serif" }}>
+        <button onClick={handleShare} className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-[12px] font-bold transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg active:scale-95 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" style={{ background: copied ? "#23a559" : "#5865F2", fontFamily: "'Inter', sans-serif" }}>
           {copied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
           {copied ? "Copied!" : "Share"}
         </button>
@@ -208,24 +228,29 @@ export function TradeAnalyzerPanel({
       />
 
       <div className="flex-1 overflow-y-auto py-1 custom-scrollbar">
-        <TradeSectionPanel 
-          label="You Give" 
-          type="give" 
-          items={giveItems} 
-          isDraggingGlobal={isGlobalDragging} 
-          onQtyChange={(id, qty) => changeQty("give", id, qty)} 
-          onRemove={(id) => removeCard("give", id)} 
-          onClear={() => clearSection("give")} 
-          onAdd={(card) => addCard("give", card)} 
-          pinnedIds={new Set(pinnedIds)}
-          onTogglePin={(id) => { togglePin("give", id); startGuide("management"); }}
-        />
+        {/* Management Highlight Wrap */}
+        <div className={`relative transition-all duration-300 ${isClearTarget ? "ring-2 ring-[#5865F2] rounded-[8px] bg-[rgba(88,101,242,0.05)] shadow-[0_0_20px_rgba(88,101,242,0.2)] z-[100005]" : ""}`}>
+          <TradeSectionPanel 
+            label="You Give" 
+            type="give" 
+            items={giveItems} 
+            isDraggingGlobal={isGlobalDragging} 
+            onQtyChange={(id, qty) => changeQty("give", id, qty)} 
+            onRemove={(id) => removeCard("give", id)} 
+            onClear={() => clearSection("give")} 
+            onAdd={(card) => addCard("give", card)} 
+            pinnedIds={new Set(pinnedIds)}
+            onTogglePin={(id) => { togglePin("give", id); startGuide("management"); }}
+          />
+        </div>
+
         <div className="relative mx-3 md:mx-4 flex items-center justify-center my-1">
           <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[rgba(255,255,255,0.04)]" /></div>
           <button onClick={swap} className="relative flex items-center justify-center w-7 h-7 rounded-full transition-all duration-300 ease-out hover:scale-110 z-10 bg-[#1E1F22] border border-[rgba(255,255,255,0.08)] text-[#80848E] hover:text-[#DBDEE1] hover:bg-[#2B2D31] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]" title="Swap Give and Get">
             <ArrowUpDown className="w-3 h-3 md:w-3.5 md:h-3.5" />
           </button>
         </div>
+        
         <TradeSectionPanel 
           label="You Get" 
           type="get" 
