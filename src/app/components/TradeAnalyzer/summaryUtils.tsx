@@ -1,4 +1,3 @@
-import React from "react";
 import { TradeCard, MasterUnit } from "../../../types";
 
 export const fmtK = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${n}`;
@@ -9,9 +8,9 @@ export const getAvatarStyle = (name: string) => {
   const h = Math.abs(hash) % 360;
   return { background: `linear-gradient(135deg, hsl(${h}, 60%, 50%), hsl(${(h + 40) % 360}, 60%, 30%))` };
 };
+
 export const getInitials = (name: string) => name.substring(0, 2).toUpperCase();
 
-// VALUE-WEIGHTED STAT CALCULATION: Ensures high-value units dictate stats over low-value filler items
 const getItemWeight = (c: TradeCard, master: MasterUnit | undefined) => {
   if (!master) return 1 * c.qty;
   let val = 1;
@@ -39,123 +38,101 @@ export const avgStat = (items: TradeCard[], key: "rarity" | "supply" | "demand",
   return (weightedSum / totalWeight).toFixed(1);
 };
 
-// SHARED LOGIC FOR DYNAMIC SENTENCE GENERATION
-const buildSummaryText = (giveItems: TradeCard[], getItems: TradeCard[], giveTotal: number, getTotal: number, ALL_UNITS: MasterUnit[], isHtml: boolean) => {
-  if (giveItems.length === 0 && getItems.length === 0) return isHtml ? <>Add units to compare values.</> : "Add units to compare values.";
-  if (giveItems.length === 0) return isHtml ? <>Add units to the <strong className="text-[#F2F3F5]">You Give</strong> side.</> : "Add units to the 'I Give' side.";
-  if (getItems.length === 0) return isHtml ? <>Add units to the <strong className="text-[#F2F3F5]">You Get</strong> side.</> : "Add units to the 'I Get' side.";
+// MARKET PREDICTION ALGORITHM
+const TAG_WEIGHTS: Record<string, { st: number, lt: number }> = {
+  stable: { st: 1.0, lt: 1.0 },
+  unstable: { st: 0.7, lt: 0.4 },
+  rising: { st: 1.5, lt: 1.25 },
+  dropping: { st: 0.5, lt: 0.75 },
+  inflated: { st: 1.05, lt: 0.85 },
+  deflated: { st: 0.95, lt: 1.15 },
+  varies: { st: 0.95, lt: 0.9 },
+  maximum: { st: 0.85, lt: 0.8 },
+  hyped: { st: 1.15, lt: 0.7 },
+  gatekept: { st: 1.1, lt: 1.1 },
+  "black-marketed": { st: 0.8, lt: 0.85 }
+};
 
+export const getTradeForecast = (giveItems: TradeCard[], getItems: TradeCard[], ALL_UNITS: MasterUnit[]) => {
+  if (giveItems.length === 0 || getItems.length === 0) return { calculable: false, st: 0, lt: 0 };
+  
   const isOC = (id: string) => {
     const u = ALL_UNITS.find(unit => unit.id === id);
     return u?.value === "owner" || u?.valueDisplay === "Owner's Choice";
   };
+  if (giveItems.some(i => isOC(i.id)) || getItems.some(i => isOC(i.id))) return { calculable: false, st: 0, lt: 0 };
 
-  const giveHasOC = giveItems.some(i => isOC(i.id));
-  const getHasOC = getItems.some(i => isOC(i.id));
-  if (giveHasOC || getHasOC) {
-    const msg = "Trade contains Owner's Choice units. Value difference cannot be mathematically calculated.";
-    return isHtml ? <span className="text-[#FAA61A]">{msg}</span> : msg;
-  }
+  const v_given = giveItems.reduce((acc, c) => acc + c.value * c.qty, 0);
+  const v_received = getItems.reduce((acc, c) => acc + c.value * c.qty, 0);
+  if (v_given === 0) return { calculable: false, st: 0, lt: 0 };
 
-  const statGains: string[] = [];
-  const statLosses: string[] = [];
-  const statGainsHtml: React.ReactNode[] = [];
-  const statLossesHtml: React.ReactNode[] = [];
+  const vw = v_received / v_given;
 
-  const aGR = avgStat(giveItems, "rarity", ALL_UNITS); const aTR = avgStat(getItems, "rarity", ALL_UNITS);
-  if (aGR !== "—" && aTR !== "—") {
-    if (parseFloat(aTR) > parseFloat(aGR)) { statGains.push("rarity"); statGainsHtml.push(<span key="r-gain">rarity</span>); }
-    else if (parseFloat(aTR) < parseFloat(aGR)) { statLosses.push("rarity"); statLossesHtml.push(<span key="r-lose">rarity</span>); }
-  }
+  const getTm = (items: TradeCard[], type: 'st' | 'lt') => {
+    let weightedSum = 0;
+    let totalWeight = 0;
+    items.forEach(c => {
+      const master = ALL_UNITS.find(u => u.id === c.id);
+      const weight = c.value * c.qty; 
+      let status = master?.status || "stable";
+      if (!TAG_WEIGHTS[status]) status = "stable";
+      
+      weightedSum += TAG_WEIGHTS[status][type] * weight;
+      totalWeight += weight;
+    });
+    return totalWeight > 0 ? weightedSum / totalWeight : 1;
+  };
 
-  const aGS = avgStat(giveItems, "supply", ALL_UNITS); const aTS = avgStat(getItems, "supply", ALL_UNITS);
-  if (aGS !== "—" && aTS !== "—") {
-    if (parseFloat(aTS) < parseFloat(aGS)) { statGains.push("supply"); statGainsHtml.push(<span key="s-gain">supply</span>); }
-    else if (parseFloat(aTS) > parseFloat(aGS)) { statLosses.push("supply"); statLossesHtml.push(<span key="s-lose">supply</span>); }
-  }
+  const tm_st_given = getTm(giveItems, 'st');
+  const tm_st_received = getTm(getItems, 'st');
+  const tm_lt_given = getTm(giveItems, 'lt');
+  const tm_lt_received = getTm(getItems, 'lt');
 
-  const aGD = avgStat(giveItems, "demand", ALL_UNITS); const aTD = avgStat(getItems, "demand", ALL_UNITS);
-  if (aGD !== "—" && aTD !== "—") {
-    if (parseFloat(aTD) > parseFloat(aGD)) { statGains.push("demand"); statGainsHtml.push(<span key="d-gain">demand</span>); }
-    else if (parseFloat(aTD) < parseFloat(aGD)) { statLosses.push("demand"); statLossesHtml.push(<span key="d-lose">demand</span>); }
-  }
+  const vt_st = vw * (tm_st_received / tm_st_given);
+  const vt_lt = vw * (tm_lt_received / tm_lt_given);
 
+  const getL = (items: TradeCard[]) => {
+    let d = parseFloat(avgStat(items, "demand", ALL_UNITS));
+    let s = parseFloat(avgStat(items, "supply", ALL_UNITS));
+    if (isNaN(d)) d = 3;
+    if (isNaN(s) || s === 0) s = 3;
+    return d / s;
+  };
+
+  const l_given = getL(giveItems);
+  const ld = getL(getItems) / Math.max(l_given, 0.01);
+
+  const getRa = (items: TradeCard[]) => {
+    let r = parseFloat(avgStat(items, "rarity", ALL_UNITS));
+    if (isNaN(r)) r = 10;
+    return Math.max(r, 0.1); 
+  };
+  
+  const ra = getRa(getItems) / getRa(giveItems);
+
+  // Corrected predictive formula logic using (Variable - 1) structure
+  const score_st = ((0.8 * (vt_st - 1)) + (0.6 * (ld - 1)) + (0.1 * (ra - 1))) * 100;
+  const score_lt = ((0.85 * (vt_lt - 1)) + (0.4 * (ld - 1)) + (0.25 * (ra - 1))) * 100;
+
+  return { calculable: true, st: score_st, lt: score_lt };
+};
+
+export const getShareText = (giveItems: TradeCard[], getItems: TradeCard[], giveTotal: number, getTotal: number, ALL_UNITS: MasterUnit[]) => {
+  const giveParts = giveItems.map((c) => `${c.qty}x ${c.name} (${fmtK(c.value * c.qty)})`).join("\n> ");
+  const getParts  = getItems.map((c) => `${c.qty}x ${c.name} (${fmtK(c.value * c.qty)})`).join("\n> ");
+  
   const valDiff = getTotal - giveTotal;
-  const percentDiff = giveTotal > 0 ? ((Math.abs(valDiff) / giveTotal) * 100).toFixed(1) : "0.0";
-  const numPercent = parseFloat(percentDiff);
-  const formattedVal = Math.abs(valDiff).toLocaleString();
+  const sign = valDiff > 0 ? "+" : "";
+  const diffStr = (giveTotal > 0 && getTotal > 0) ? `${sign}${valDiff.toLocaleString()} (${sign}${((valDiff / giveTotal) * 100).toFixed(1)}%)` : "N/A";
 
-  let valueText = "";
-  if (valDiff > 0) {
-    if (numPercent > 15) valueText = `Gains significant value (+${formattedVal} / +${percentDiff}%)`;
-    else if (numPercent > 5) valueText = `Gains value (+${formattedVal} / +${percentDiff}%)`;
-    else valueText = `Slightly gains value (+${formattedVal} / +${percentDiff}%)`;
-  } else if (valDiff < 0) {
-    if (numPercent > 15) valueText = `Loses significant value (-${formattedVal} / -${percentDiff}%)`;
-    else if (numPercent > 5) valueText = `Loses value (-${formattedVal} / -${percentDiff}%)`;
-    else valueText = `Slightly loses value (-${formattedVal} / -${percentDiff}%)`;
-  } else {
-    valueText = "Breaks even in value";
-  }
+  const rShift = `${avgStat(giveItems, "rarity", ALL_UNITS)} ➔ ${avgStat(getItems, "rarity", ALL_UNITS)}`;
+  const sShift = `${avgStat(giveItems, "supply", ALL_UNITS)} ➔ ${avgStat(getItems, "supply", ALL_UNITS)}`;
+  const dShift = `${avgStat(giveItems, "demand", ALL_UNITS)} ➔ ${avgStat(getItems, "demand", ALL_UNITS)}`;
+  
+  const forecast = getTradeForecast(giveItems, getItems, ALL_UNITS);
+  const forecastStr = forecast.calculable 
+      ? `Short Term: ${forecast.st > 0 ? '+' : ''}${forecast.st.toFixed(1)} | Long Term: ${forecast.lt > 0 ? '+' : ''}${forecast.lt.toFixed(1)}` 
+      : "Unavailable (Missing or O/C units)";
 
-  const formatListStr = (arr: string[]) => {
-    if (arr.length === 0) return "";
-    if (arr.length === 1) return arr[0];
-    if (arr.length === 2) return `${arr[0]} and ${arr[1]}`;
-    return `${arr.slice(0, -1).join(", ")}, and ${arr[arr.length - 1]}`;
-  };
-
-  const formatListHtml = (arr: React.ReactNode[]) => {
-    if (arr.length === 0) return null;
-    if (arr.length === 1) return arr[0];
-    if (arr.length === 2) return <>{arr[0]} and {arr[1]}</>;
-    return <>{arr.map((item, i) => i === arr.length - 1 ? <span key={i}>and {item}</span> : <span key={i}>{item}, </span>)}</>;
-  };
-
-  const gainsList = isHtml ? formatListHtml(statGainsHtml) : formatListStr(statGains);
-  const lossesList = isHtml ? formatListHtml(statLossesHtml) : formatListStr(statLosses);
-
-  // Constructing final sentences cleanly
-  if (valDiff > 0) {
-    if (statGains.length > 0 && statLosses.length === 0) {
-      return isHtml ? <>{valueText}, while gaining in {gainsList}.</> : `${valueText}, while gaining in ${gainsList}.`;
-    }
-    if (statGains.length === 0 && statLosses.length > 0) {
-      return isHtml ? <>{valueText}, but trading down in {lossesList}.</> : `${valueText}, but trading down in ${lossesList}.`;
-    }
-    if (statGains.length > 0 && statLosses.length > 0) {
-      return isHtml ? <>{valueText}, gaining in {gainsList} but trading down in {lossesList}.</> : `${valueText}, gaining in ${gainsList} but trading down in ${lossesList}.`;
-    }
-    return isHtml ? <>{valueText}.</> : `${valueText}.`;
-  } else if (valDiff < 0) {
-    if (statGains.length > 0 && statLosses.length === 0) {
-      return isHtml ? <>{valueText}, though you gain a significant boost in {gainsList}.</> : `${valueText}, though you gain a significant boost in ${gainsList}.`;
-    }
-    if (statGains.length === 0 && statLosses.length > 0) {
-      return isHtml ? <>{valueText}, and trading down in {lossesList}.</> : `${valueText}, and trading down in ${lossesList}.`;
-    }
-    if (statGains.length > 0 && statLosses.length > 0) {
-      return isHtml ? <>{valueText}, though you gain {gainsList} while trading down in {lossesList}.</> : `${valueText}, though you gain ${gainsList} while trading down in ${lossesList}.`;
-    }
-    return isHtml ? <>{valueText}.</> : `${valueText}.`;
-  } else {
-    if (statGains.length > 0 && statLosses.length === 0) {
-      return isHtml ? <>Breaks even in value, while gaining in {gainsList}.</> : `Breaks even in value, while gaining in ${gainsList}.`;
-    }
-    if (statGains.length === 0 && statLosses.length > 0) {
-      return isHtml ? <>Breaks even in value, but trading down in {lossesList}.</> : `Breaks even in value, but trading down in ${lossesList}.`;
-    }
-    if (statGains.length > 0 && statLosses.length > 0) {
-      return isHtml ? <>Breaks even in value, gaining in {gainsList} but trading down in {lossesList}.</> : `Breaks even in value, gaining in ${gainsList} but trading down in ${lossesList}.`;
-    }
-    return isHtml ? <>The trade is perfectly balanced.</> : "The trade is perfectly balanced.";
-  }
+  return `**[I GIVE]**\n> ${giveParts || "Nothing"}\n\n**[I GET]**\n> ${getParts || "Nothing"}\n\n**Raw Value Diff:** ${diffStr}\n**Market Forecast:** ${forecastStr}\n**Rarity, Supply, Demand shift:**\n> R: ${rShift} | S: ${sShift} | D: ${dShift}\n\nw/l`;
 };
-
-export const generateTextSummary = (giveItems: TradeCard[], getItems: TradeCard[], giveTotal: number, getTotal: number, ALL_UNITS: MasterUnit[]) => {
-  return buildSummaryText(giveItems, getItems, giveTotal, getTotal, ALL_UNITS, false);
-};
-
-export function DynamicSummary({ giveItems, getItems, giveTotal, getTotal, ALL_UNITS }: { giveItems: TradeCard[], getItems: TradeCard[], giveTotal: number, getTotal: number, ALL_UNITS: MasterUnit[] }) {
-  return buildSummaryText(giveItems, getItems, giveTotal, getTotal, ALL_UNITS, true) as React.ReactElement;
-}

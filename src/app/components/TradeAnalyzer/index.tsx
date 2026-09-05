@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Calculator, RotateCcw, Share2, Check, ArrowUpDown, Wand2, X } from "lucide-react";
+import { Calculator, RotateCcw, Share2, Check, ArrowUpDown, Wand2, X, Info } from "lucide-react";
 import { TradeCard } from "../../../types";
 import { TradeSectionPanel } from "./TradeSectionPanel";
 import { TradeNotices } from "./TradeNotices";
 import { SmartParserMenu } from "./SmartParserMenu";
 import { TradeSummaryBox } from "./TradeSummaryBox";
 import { usePanelResize } from "../../../hooks/usePanelResize";
-import { fmtK, generateTextSummary, avgStat } from "./summaryUtils";
+import { getShareText } from "./summaryUtils";
 import { useUnits } from "../../../context/UnitContext";
 import { GuideType } from "../guides/AquaGuideOverlay";
 import { useTradeStore } from "../../../store/useTradeStore";
@@ -121,13 +121,7 @@ export function TradeAnalyzerPanel({
   }, [undoCache, overwrite]);
 
   const handleShare = useCallback(() => {
-    const giveParts = giveItems.map((c) => `${c.qty}x ${c.name} (${fmtK(c.value * c.qty)})`).join("\n> ");
-    const getParts  = getItems.map((c) => `${c.qty}x ${c.name} (${fmtK(c.value * c.qty)})`).join("\n> ");
-    const rShift = `${avgStat(giveItems, "rarity", ALL_UNITS)} ➔ ${avgStat(getItems, "rarity", ALL_UNITS)}`;
-    const sShift = `${avgStat(giveItems, "supply", ALL_UNITS)} ➔ ${avgStat(getItems, "supply", ALL_UNITS)}`;
-    const dShift = `${avgStat(giveItems, "demand", ALL_UNITS)} ➔ ${avgStat(getItems, "demand", ALL_UNITS)}`;
-    
-    const text = `**[I GIVE]**\n> ${giveParts || "Nothing"}\n\n**[I GET]**\n> ${getParts || "Nothing"}\n\n**Diff:** ${generateTextSummary(giveItems, getItems, giveTotal, getTotal, ALL_UNITS)}\n**Rarity, Supply, Demand shift:**\n> R: ${rShift} | S: ${sShift} | D: ${dShift}\n\nw/l`;
+    const text = getShareText(giveItems, getItems, giveTotal, getTotal, ALL_UNITS);
 
     const tryWrite = async () => {
       try {
@@ -228,7 +222,6 @@ export function TradeAnalyzerPanel({
       />
 
       <div className="flex-1 overflow-y-auto py-1 custom-scrollbar">
-        {/* Management Highlight Wrap */}
         <div className={`relative transition-all duration-300 ${isClearTarget ? "ring-2 ring-[#5865F2] rounded-[8px] bg-[rgba(88,101,242,0.05)] shadow-[0_0_20px_rgba(88,101,242,0.2)] z-[100005]" : ""}`}>
           <TradeSectionPanel 
             label="You Give" 
@@ -263,7 +256,29 @@ export function TradeAnalyzerPanel({
           pinnedIds={new Set(pinnedIds)}
           onTogglePin={(id) => { togglePin("get", id); startGuide("management"); }}
         />
+        
         <TradeNotices giveItems={giveItems} getItems={getItems} ALL_UNITS={ALL_UNITS} />
+
+        {/* --- NEW HOW IT WORKS EXPLANATION BLOCK --- */}
+        <div className="mx-3 md:mx-4 mt-1 mb-4 bg-[#1E1F22] border border-[rgba(255,255,255,0.04)] rounded-[8px] p-3 md:p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="w-4 h-4 text-[#5865F2]" />
+            <h4 className="text-[11px] font-bold text-[#F2F3F5] uppercase tracking-wider">How the Forecast Works</h4>
+          </div>
+          <p className="text-[11.5px] text-[#949BA4] leading-relaxed">
+            The <strong>Market Forecast</strong> system goes beyond raw value. It uses an advanced algorithm to predict the success of a trade. <strong className="text-[#DBDEE1]">Scores &gt; 0</strong> indicate a mathematical win, while <strong className="text-[#DBDEE1]">Scores &lt; 0</strong> indicate a loss.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <div className="flex gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#FAA61A] mt-1.5 shrink-0" />
+              <p className="text-[11px] text-[#B5BAC1] leading-snug"><strong className="text-[#DBDEE1]">Short-Term Flip</strong> prioritizes immediate liquidity (Demand ÷ Supply) and hyped momentum tags.</p>
+            </div>
+            <div className="flex gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-[#5865F2] mt-1.5 shrink-0" />
+              <p className="text-[11px] text-[#B5BAC1] leading-snug"><strong className="text-[#DBDEE1]">Long-Term Hold</strong> severely punishes unstable/hyped units and rewards high-rarity assets that retain value.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       {undoCache && (
