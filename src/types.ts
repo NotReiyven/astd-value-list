@@ -4,7 +4,6 @@ export type UnitStatus =
   | "hyped" | "gatekept" | "black-marketed";
 
 export type FilterKey = "All" | "S" | "A" | "B" | "C" | "Pure" | "Oddities" | "Untiered";
-// (Keep your other types in this file exactly as they are)
 
 export interface MasterUnit {
   id: string;
@@ -18,13 +17,14 @@ export interface MasterUnit {
   aliases?: string[];
   demand: number;
   status?: UnitStatus;
+  secondaryTags?: string[]; // <-- ADDED THIS LINE to catch the (Hyped), (Gatekept) tags
   isNew?: boolean;
   notice?: string;
   imageUrl?: string;
-  tier?: string; // <-- Add this line
-  subCategory?: string;      // Captures "Top S Tier" or "Skins"
-  subCategoryRange?: string; // Captures "100,000 - O/C" or "Misc"
-  obtainability?: "OBT" | "UNOB"; // <-- ADD THIS LINE
+  tier?: string; 
+  subCategory?: string;      
+  subCategoryRange?: string; 
+  obtainability?: "OBT" | "UNOB"; 
 }
 
 export type Unit = MasterUnit;

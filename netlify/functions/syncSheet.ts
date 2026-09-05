@@ -87,7 +87,6 @@ function jsonResponse(
   };
 }
 
-// Lightweight sanitization wrapper
 function cleanText(input: string | undefined): string {
   if (!input) return "";
   return sanitizeHtml(input, { allowedTags: [], allowedAttributes: {} });
@@ -163,7 +162,6 @@ export const handler: Handler = async (event, context) => {
         let changelogColIdx = -1;
         rowData.forEach((row: RowData) => {
           if (!row.values) return;
-
           if (changelogColIdx === -1) {
             for (let j = 0; j < row.values.length; j++) {
               if ((row.values[j]?.formattedValue || "").includes("Latest Update Log")) {
@@ -171,7 +169,6 @@ export const handler: Handler = async (event, context) => {
               }
             }
           }
-
           if (changelogColIdx !== -1) {
             const text = cleanText(row.values[changelogColIdx]?.formattedValue?.trim());
             if (text && !text.includes("Latest Update Log")) changelog.push(text);
@@ -252,15 +249,9 @@ export const handler: Handler = async (event, context) => {
           name = split[0].trim(); subtitle = split[1] ? split[1].trim() : "";
         }
 
-        if (tierKey === "Pure" && !name.toLowerCase().includes("(pure)")) {
-          name = `${name} (Pure)`;
-        }
-
+        if (tierKey === "Pure" && !name.toLowerCase().includes("(pure)")) name = `${name} (Pure)`;
         let unitId = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-
-        if (unitId === "ice-dragon" && subtitle.toLowerCase().includes("eis shenron")) {
-          unitId = "eis";
-        }
+        if (unitId === "ice-dragon" && subtitle.toLowerCase().includes("eis shenron")) unitId = "eis";
 
         const rawValue = colMap.value !== -1 ? cleanText(getCellStr(colMap.value).toLowerCase()) : "";
         let numericValue: number | "owner" | "range" = 0, valueMin: number | undefined = undefined, valueDisplay: string | undefined = undefined;
@@ -279,6 +270,7 @@ export const handler: Handler = async (event, context) => {
           numericValue = parseInt(rawValue.replace(/[^0-9]/g, "")) || 0;
         }
 
+        // Primary Status logic
         const nameColor = row[1]?.effectiveFormat?.backgroundColor;
         const valColor = colMap.value !== -1 ? row[colMap.value]?.effectiveFormat?.backgroundColor : undefined;
         let parsedTag = getTagFromColor(nameColor);
@@ -288,6 +280,53 @@ export const handler: Handler = async (event, context) => {
         const validStatuses = ["stable", "unstable", "rising", "dropping", "inflated", "deflated", "varies", "maximum", "hyped", "gatekept", "black-marketed"];
         const unitStatus = validStatuses.includes(rawStatusText) ? rawStatusText : parsedTag;
 
+        // --- BATTLE-TESTED SECONDARY TAG EXTRACTION ---
+        const secondaryTagsSet = new Set<string>();
+        const validSecondaryTags = ["hyped", "gatekept", "black-marketed"];
+        
+        // 1. Check for manually typed text tags hidden in the status column
+        if (rawStatusText) {
+          validSecondaryTags.forEach(tag => {
+            if (rawStatusText.includes(tag) && tag !== unitStatus) secondaryTagsSet.add(tag);
+          });
+        }
+
+        // 2. Check Colors of Supply, Demand, and Value.
+        // We explicitly ignore Cyan if Supply=1 or Demand=5 to prevent natural color scale collisions.
+        
+        // Check Value Cell
+        if (colMap.value !== -1) {
+          const c = row[colMap.value]?.effectiveFormat?.backgroundColor;
+          if (c) {
+             const tag = getTagFromColor(c);
+             if (validSecondaryTags.includes(tag) && tag !== unitStatus) secondaryTagsSet.add(tag);
+          }
+        }
+
+        // Check Supply Cell
+        if (colMap.supply !== -1) {
+          const sVal = parseFloat(getCellStr(colMap.supply)) || 3;
+          const c = row[colMap.supply]?.effectiveFormat?.backgroundColor;
+          if (c) {
+             const tag = getTagFromColor(c);
+             // Ignore false positives where Supply 1 is naturally Cyan
+             if (tag === "hyped" && sVal <= 1.5) { /* Natural overlap, ignore */ }
+             else if (validSecondaryTags.includes(tag) && tag !== unitStatus) secondaryTagsSet.add(tag);
+          }
+        }
+
+        // Check Demand Cell
+        if (colMap.demand !== -1) {
+          const dVal = parseFloat(getCellStr(colMap.demand)) || 3;
+          const c = row[colMap.demand]?.effectiveFormat?.backgroundColor;
+          if (c) {
+             const tag = getTagFromColor(c);
+             // Ignore false positives where Demand 5 is naturally Cyan
+             if (tag === "hyped" && dVal >= 4.5) { /* Natural overlap, ignore */ }
+             else if (validSecondaryTags.includes(tag) && tag !== unitStatus) secondaryTagsSet.add(tag);
+          }
+        }
+
         parsedUnits.push({
           id: unitId,
           name, subtitle, value: numericValue, valueMin, valueDisplay,
@@ -295,7 +334,9 @@ export const handler: Handler = async (event, context) => {
           supply: colMap.supply !== -1 ? parseFloat(getCellStr(colMap.supply)) || 0 : 0,
           demand: colMap.demand !== -1 ? parseFloat(getCellStr(colMap.demand)) || 0 : 0,
           notice: colMap.notices !== -1 ? cleanText(getCellStr(colMap.notices)) : "",
-          status: unitStatus, tier: tierKey, subCategory: currentSubCategory, subCategoryRange: currentSubCategoryRange
+          status: unitStatus, 
+          secondaryTags: Array.from(secondaryTagsSet),
+          tier: tierKey, subCategory: currentSubCategory, subCategoryRange: currentSubCategoryRange
         });
       }
     }
