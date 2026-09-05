@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Sparkles, ChevronRight, Zap, MousePointer2 } from "lucide-react";
 
-export type GuideType = "main" | "channels" | "advanced" | "developer" | "filters" | "dictionary" | "stats" | "management" | "annoyed" | null;
+export type GuideType = "main" | "channels" | "advanced" | "developer" | "filters" | "dictionary" | "stats" | "management" | "annoyed" | "academy_grad" | null;
 
 export const AQUA_DIALOGUES: Record<string, string[]> = {
   main: [
@@ -42,6 +42,11 @@ export const AQUA_DIALOGUES: Record<string, string[]> = {
   annoyed: [
     "",
     "!!Stop poking me!!! Figure it out yourself or go bother ^^Reiyven^^ with a support ticket! I have Goddess things to do!"
+  ],
+  academy_grad: [
+    "",
+    "Oh ho? You actually completed the Sandbox checklist?! I didn't think a NEET like you had the attention span!",
+    "I guess my divine guidance is just *that* good! You're officially a certified trader now. Don't go losing all your value, or I'll laugh at you! ^^Praise Aqua!^^"
   ]
 };
 
@@ -231,13 +236,13 @@ export function AquaGuideOverlay({
                      onClick={(e) => { e.stopPropagation(); onEndGuide(); }} 
                      className="group flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold py-2 px-5 rounded-[6px] transition-all duration-300 active:scale-95 shadow-md focus-visible:outline-none animate-fade-in"
                    >
-                     <span>{isMainStep4 ? "Praise Aqua! (Finish)" : "Got it!"}</span>
+                     <span>{isMainStep4 || guideState.type === "academy_grad" ? "Praise Aqua! (Finish)" : "Got it!"}</span>
                      <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                    </button>
                  )}
                </div>
 
-               {/* Optional Skip Button (Hidden if we force interaction, but good as a safety hatch) */}
+               {/* Optional Skip Button */}
                <button 
                  onClick={(e) => { e.stopPropagation(); onEndGuide(); }} 
                  className="text-[#80848E] hover:text-[#DBDEE1] text-[11.5px] font-bold uppercase tracking-wider transition-colors px-3 py-1.5 rounded-[4px] hover:bg-[rgba(255,255,255,0.05)] focus-visible:outline-none"
